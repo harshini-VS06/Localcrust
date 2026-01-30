@@ -1,0 +1,68 @@
+# Ignore everything by default
+*
+!*/
+
+# ========================================
+# BACKEND - Core Files (Allow these)
+# ========================================
+!backend/app.py
+!backend/aws_app.py
+!backend/database.py
+!backend/dynamodb_database.py
+!backend/razorpay_service.py
+!backend/email_service.py
+!backend/sns_service.py
+!backend/ai_service.py
+!backend/.env
+!backend/.env.example
+!backend/.env.aws.example
+!backend/requirements_sns.txt
+
+# BACKEND - Feature Modules (Allow these)
+!backend/baker_analytics.py
+!backend/baker_analytics_dynamodb.py
+!backend/baker_orders.py
+!backend/baker_orders_dynamodb.py
+!backend/baker_reviews.py
+!backend/baker_reviews_dynamodb.py
+!backend/customer_profile.py
+!backend/customer_profile_dynamodb.py
+!backend/notifications.py
+!backend/notifications_dynamodb.py
+!backend/admin_routes.py
+!backend/notification_routes.py
+!backend/advanced_features.py
+
+# ========================================
+# FRONTEND (Allow these)
+# ========================================
+!frontend/package.json
+!frontend/vite.config.ts
+!frontend/.env
+!frontend/postcss.config.mjs
+!frontend/index.html
+
+# Frontend src folder - allow everything inside
+!frontend/src/**/*
+
+# ========================================
+# Root Level (Allow these)
+# ========================================
+!.gitignore
+!README.md
+
+# ========================================
+# Explicitly ignore sensitive/heavy items
+# ========================================
+node_modules/
+venv/
+__pycache__/
+*.pyc
+*.db
+*.sqlite
+instance/
+.vscode/
+.idea/
+*.log
+dist/
+build/
