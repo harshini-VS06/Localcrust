@@ -14,7 +14,6 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
 SECRET_KEY = 'your-secret-key-change-in-production'
 
-# Decorator to require admin authentication
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -24,7 +23,6 @@ def admin_required(f):
             return jsonify({'error': 'No token provided'}), 401
         
         try:
-            # Remove 'Bearer ' prefix if present
             if token.startswith('Bearer '):
                 token = token[7:]
             
@@ -33,7 +31,6 @@ def admin_required(f):
             if payload.get('user_type') != 'admin':
                 return jsonify({'error': 'Admin access required'}), 403
             
-            # Get admin and check if active
             admin = Admin.query.get(payload['admin_id'])
             if not admin or not admin.is_active:
                 return jsonify({'error': 'Admin account inactive'}), 403
@@ -49,36 +46,29 @@ def admin_required(f):
     
     return decorated_function
 
-# Admin Authentication Routes
 @admin_bp.route('/login', methods=['POST'])
 def admin_login():
     """Admin login endpoint"""
     try:
         data = request.get_json()
         
-        # Validate required fields
         if not data.get('username') or not data.get('password'):
             return jsonify({'error': 'Username and password required'}), 400
         
-        # Find admin
         admin = Admin.query.filter_by(username=data['username']).first()
         
         if not admin:
             return jsonify({'error': 'Invalid credentials'}), 401
         
-        # Check if admin is active
         if not admin.is_active:
             return jsonify({'error': 'Admin account is inactive'}), 403
         
-        # Verify password
         if not check_password_hash(admin.password_hash, data['password']):
             return jsonify({'error': 'Invalid credentials'}), 401
         
-        # Update last login
         admin.last_login = datetime.utcnow()
         db.session.commit()
         
-        # Create token
         payload = {
             'admin_id': admin.id,
             'user_type': 'admin',
@@ -117,36 +107,29 @@ def get_admin_profile():
         'last_login': admin.last_login.isoformat() if admin.last_login else None
     }), 200
 
-# Dashboard Statistics
 @admin_bp.route('/dashboard/stats', methods=['GET'])
 @admin_required
 def get_dashboard_stats():
     """Get dashboard statistics"""
     try:
-        # Total counts
         total_users = User.query.filter_by(user_type='customer').count()
         total_bakers = Baker.query.count()
         total_products = Product.query.count()
         total_orders = Order.query.count()
         
-        # Verified vs unverified bakers
         verified_bakers = Baker.query.filter_by(verified=True).count()
         unverified_bakers = Baker.query.filter_by(verified=False).count()
         
-        # Revenue calculation
         completed_orders = Order.query.filter_by(payment_status='completed').all()
         total_revenue = sum(order.total_amount for order in completed_orders)
         
-        # Recent orders
         recent_orders = Order.query.order_by(desc(Order.created_at)).limit(5).all()
         
-        # Order status breakdown
         order_statuses = db.session.query(
             Order.status, 
             func.count(Order.id)
         ).group_by(Order.status).all()
         
-        # Recent reviews
         recent_reviews = Review.query.order_by(desc(Review.created_at)).limit(5).all()
         
         return jsonify({
@@ -179,7 +162,6 @@ def get_dashboard_stats():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# User Management
 @admin_bp.route('/users', methods=['GET'])
 @admin_required
 def get_all_users():
@@ -229,7 +211,6 @@ def get_user_details(user_id):
             'total_reviews': len(user.reviews)
         }
         
-        # Add baker profile if user is a baker
         if user.user_type == 'baker' and user.baker_profile:
             baker = user.baker_profile
             user_data['baker_profile'] = {
@@ -248,7 +229,6 @@ def get_user_details(user_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Baker Management
 @admin_bp.route('/bakers', methods=['GET'])
 @admin_required
 def get_all_bakers():
@@ -345,7 +325,6 @@ def verify_baker(baker_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Product Management
 @admin_bp.route('/products', methods=['GET'])
 @admin_required
 def get_all_products():
@@ -394,7 +373,6 @@ def delete_product(product_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Order Management
 @admin_bp.route('/orders', methods=['GET'])
 @admin_required
 def get_all_orders():
@@ -469,7 +447,6 @@ def get_order_details(order_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Review Management
 @admin_bp.route('/reviews', methods=['GET'])
 @admin_required
 def get_all_reviews():
@@ -520,7 +497,6 @@ def delete_review(review_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# User Management - Delete User
 @admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @admin_required
 def delete_user(user_id):
@@ -544,7 +520,6 @@ def delete_user(user_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# User Management - Create User
 @admin_bp.route('/users', methods=['POST'])
 @admin_required
 def create_user():
@@ -552,17 +527,14 @@ def create_user():
     try:
         data = request.get_json()
         
-        # Validate required fields
         required_fields = ['name', 'email', 'password']
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Check if user already exists
         if User.query.filter_by(email=data['email']).first():
             return jsonify({'error': 'Email already registered'}), 400
         
-        # Create new user
         user = User(
             name=data['name'],
             email=data['email'],
@@ -587,7 +559,6 @@ def create_user():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Baker Management - Delete Baker
 @admin_bp.route('/bakers/<int:baker_id>', methods=['DELETE'])
 @admin_required
 def delete_baker(baker_id):
@@ -598,13 +569,10 @@ def delete_baker(baker_id):
         if not baker:
             return jsonify({'error': 'Baker not found'}), 404
         
-        # Get the user account
         user = User.query.get(baker.user_id)
         
-        # Delete baker profile first (cascade will handle products)
         db.session.delete(baker)
         
-        # Delete associated user account
         if user:
             db.session.delete(user)
         
@@ -616,7 +584,6 @@ def delete_baker(baker_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Baker Management - Create Baker
 @admin_bp.route('/bakers', methods=['POST'])
 @admin_required
 def create_baker():
@@ -624,7 +591,6 @@ def create_baker():
     try:
         data = request.get_json()
         
-        # Validate required fields
         required_fields = ['email', 'password', 'shop_name', 'owner_name', 'phone', 
                           'business_license', 'tax_id', 'shop_address', 'city', 'state', 
                           'zip_code', 'shop_description']
@@ -632,11 +598,9 @@ def create_baker():
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Check if email already exists
         if User.query.filter_by(email=data['email']).first():
             return jsonify({'error': 'Email already registered'}), 400
         
-        # Create user account
         user = User(
             name=data['owner_name'],
             email=data['email'],
@@ -645,9 +609,8 @@ def create_baker():
         )
         
         db.session.add(user)
-        db.session.flush()  # Get user.id
+        db.session.flush()  
         
-        # Create baker profile
         baker = Baker(
             user_id=user.id,
             shop_name=data['shop_name'],
