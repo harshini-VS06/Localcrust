@@ -23,13 +23,11 @@ def send_otp_email(to_email: str, otp: str) -> bool:
         return False
     
     try:
-        # Create message
         msg = MIMEMultipart('alternative')
         msg['Subject'] = 'Your Local Crust OTP Code'
         msg['From'] = f"Local Crust Bakery <{SMTP_EMAIL}>"
         msg['To'] = to_email
         
-        # HTML content
         html = f"""
         <html>
             <body style="font-family: Arial, sans-serif; background-color: #FFF9F5; padding: 20px;">
@@ -70,10 +68,8 @@ def send_otp_email(to_email: str, otp: str) -> bool:
         </html>
         """
         
-        # Attach HTML
         msg.attach(MIMEText(html, 'html'))
         
-        # Send email
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
         server.login(SMTP_EMAIL, SMTP_PASSWORD)
