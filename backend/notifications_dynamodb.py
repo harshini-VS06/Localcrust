@@ -23,7 +23,6 @@ notifications_bp = Blueprint('notifications', __name__)
 def get_notifications():
     """Get all notifications for the logged-in user"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -34,7 +33,6 @@ def get_notifications():
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get notifications
         notifications = Notification.get_by_user_id(payload['user_id'])
         
         result = []
@@ -49,7 +47,6 @@ def get_notifications():
                 'related_review_id': n.get('related_review_id', '')
             }
             
-            # If this is a review reply notification, include the baker's reply
             if n.get('related_review_id'):
                 from dynamodb_database import reviews_table
                 response = reviews_table.get_item(Key={'id': n['related_review_id']})
@@ -76,7 +73,6 @@ def get_notifications():
 def get_unread_count():
     """Get count of unread notifications"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -87,7 +83,6 @@ def get_unread_count():
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get all notifications and count unread
         notifications = Notification.get_by_user_id(payload['user_id'])
         count = len([n for n in notifications if not n['read']])
         
@@ -100,7 +95,6 @@ def get_unread_count():
 def mark_notification_as_read(notification_id):
     """Mark a notification as read"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -111,18 +105,15 @@ def mark_notification_as_read(notification_id):
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get notification
         response = notifications_table.get_item(Key={'id': str(notification_id)})
         notification = response.get('Item')
         
         if not notification:
             return jsonify({'error': 'Notification not found'}), 404
         
-        # Verify ownership
         if notification['user_id'] != payload['user_id']:
             return jsonify({'error': 'Unauthorized'}), 403
         
-        # Mark as read
         Notification.update(str(notification_id), read=True)
         
         return jsonify({
@@ -136,7 +127,6 @@ def mark_notification_as_read(notification_id):
 def mark_all_notifications_as_read():
     """Mark all notifications as read"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -146,11 +136,9 @@ def mark_all_notifications_as_read():
         
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
-        
-        # Get all notifications for this user
+    
         notifications = Notification.get_by_user_id(payload['user_id'])
         
-        # Mark all unread as read
         for notification in notifications:
             if not notification['read']:
                 Notification.update(notification['id'], read=True)
@@ -166,7 +154,6 @@ def mark_all_notifications_as_read():
 def delete_notification(notification_id):
     """Delete a notification"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -177,18 +164,15 @@ def delete_notification(notification_id):
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get notification
         response = notifications_table.get_item(Key={'id': str(notification_id)})
         notification = response.get('Item')
         
         if not notification:
             return jsonify({'error': 'Notification not found'}), 404
         
-        # Verify ownership
         if notification['user_id'] != payload['user_id']:
             return jsonify({'error': 'Unauthorized'}), 403
         
-        # Delete notification
         notifications_table.delete_item(Key={'id': str(notification_id)})
         
         return jsonify({
@@ -198,7 +182,6 @@ def delete_notification(notification_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Helper function to create notifications
 def create_notification(user_id, title, message, notification_type='info'):
     """
     Helper function to create a notification
