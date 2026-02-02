@@ -23,7 +23,6 @@ def verify_token(token):
 def get_customer_profile():
     """Get customer profile with saved address"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -34,12 +33,10 @@ def get_customer_profile():
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get user
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
-        # Parse saved address if exists
         saved_address = None
         if user.get('saved_address'):
             try:
@@ -63,7 +60,6 @@ def get_customer_profile():
 def save_customer_address():
     """Save or update customer's default delivery address"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -74,20 +70,17 @@ def save_customer_address():
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get user
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
         data = request.get_json()
         
-        # Validate required fields
         required_fields = ['fullName', 'phone', 'addressLine1', 'city', 'state', 'pincode']
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Save address as JSON
         User.update(payload['user_id'], saved_address=json.dumps(data))
         
         return jsonify({
@@ -102,7 +95,6 @@ def save_customer_address():
 def update_customer_profile():
     """Update customer profile details"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -113,14 +105,12 @@ def update_customer_profile():
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get user
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
         data = request.get_json()
         
-        # Update allowed fields
         update_data = {}
         if 'name' in data:
             update_data['name'] = data['name']
@@ -128,7 +118,6 @@ def update_customer_profile():
         if update_data:
             User.update(payload['user_id'], **update_data)
         
-        # Get updated user
         updated_user = User.get_by_id(payload['user_id'])
         
         return jsonify({
