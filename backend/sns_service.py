@@ -16,13 +16,11 @@ from botocore.exceptions import ClientError
 
 load_dotenv()
 
-# Initialize SNS client - NO NEED for access keys when using IAM role!
 sns_client = boto3.client(
     'sns',
     region_name=os.getenv('AWS_REGION', 'us-east-1')
 )
 
-# SNS Topic ARNs - Must be set in your .env file
 SNS_ORDER_CONFIRMATION_TOPIC = os.getenv('SNS_ORDER_CONFIRMATION_TOPIC', '')
 SNS_ORDER_STATUS_TOPIC = os.getenv('SNS_ORDER_STATUS_TOPIC', '')
 SNS_DELIVERY_TOPIC = os.getenv('SNS_DELIVERY_TOPIC', '')
@@ -59,7 +57,6 @@ class SNSNotificationService:
                 'Message': message
             }
             
-            # Add message attributes if provided
             if message_attributes:
                 params['MessageAttributes'] = message_attributes
             
@@ -83,7 +80,7 @@ class SNSNotificationService:
         """
         subject = f"🎉 Order Confirmed - {order_id}"
         
-        # Create formatted message
+
         items_list = "\n".join([
             f"  • {item['product_name']} x{item['quantity']} - ₹{item['price'] * item['quantity']:.2f}"
             for item in items
@@ -128,7 +125,6 @@ This is an automated message from Local Crust Bakery.
 For support, please contact us at support@localcrust.com
         """
         
-        # Message attributes for filtering (optional)
         message_attributes = {
             'notification_type': {
                 'DataType': 'String',
@@ -143,7 +139,7 @@ For support, please contact us at support@localcrust.com
         return SNSNotificationService.send_notification(
             subject=subject,
             message=message,
-            topic_arn=SNS_ORDER_CONFIRMATION_TOPIC,  # ← Uses ORDER_CONFIRMATION topic
+            topic_arn=SNS_ORDER_CONFIRMATION_TOPIC, 
             message_attributes=message_attributes
         )
     
@@ -245,7 +241,7 @@ For support, please contact us at support@localcrust.com
         return SNSNotificationService.send_notification(
             subject=subject,
             message=message,
-            topic_arn=SNS_ORDER_STATUS_TOPIC,  # ← Uses STATUS topic
+            topic_arn=SNS_ORDER_STATUS_TOPIC,  
             message_attributes=message_attributes
         )
     
@@ -258,7 +254,6 @@ For support, please contact us at support@localcrust.com
         
         time_info = f"\nEstimated Delivery: {estimated_time}" if estimated_time else ""
         
-        # Format address
         address_str = delivery_address
         if isinstance(delivery_address, dict):
             address_parts = [
@@ -443,7 +438,7 @@ For support, please contact us at support@localcrust.com
         return SNSNotificationService.send_notification(
             subject=subject,
             message=message,
-            topic_arn=SNS_PAYMENT_TOPIC,  # ← Uses PAYMENT topic
+            topic_arn=SNS_PAYMENT_TOPIC, 
             message_attributes=message_attributes
         )
     
@@ -464,7 +459,6 @@ For support, please contact us at support@localcrust.com
         return action_texts.get(status, 'Thank you for your order!')
 
 
-# Convenience functions for easy import
 def send_order_confirmation(order_id, customer_email, customer_name, total_amount, items):
     """Send order confirmation via SNS"""
     return SNSNotificationService.send_order_confirmation(
