@@ -8,10 +8,8 @@ import os
 import json
 from decimal import Decimal
 
-# Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 
-# Table names - can be configured via environment variables
 USERS_TABLE = os.getenv('USERS_TABLE', 'LocalCrust-Users')
 BAKERS_TABLE = os.getenv('BAKERS_TABLE', 'LocalCrust-Bakers')
 PRODUCTS_TABLE = os.getenv('PRODUCTS_TABLE', 'LocalCrust-Products')
@@ -24,7 +22,6 @@ BADGES_TABLE = os.getenv('BADGES_TABLE', 'LocalCrust-Badges')
 NOTIFICATIONS_TABLE = os.getenv('NOTIFICATIONS_TABLE', 'LocalCrust-Notifications')
 ADMINS_TABLE = os.getenv('ADMINS_TABLE', 'LocalCrust-Admins')
 
-# Get table references
 users_table = dynamodb.Table(USERS_TABLE)
 bakers_table = dynamodb.Table(BAKERS_TABLE)
 products_table = dynamodb.Table(PRODUCTS_TABLE)
@@ -37,7 +34,6 @@ badges_table = dynamodb.Table(BADGES_TABLE)
 notifications_table = dynamodb.Table(NOTIFICATIONS_TABLE)
 admins_table = dynamodb.Table(ADMINS_TABLE)
 
-# Helper function to convert floats to Decimals for DynamoDB
 def float_to_decimal(obj):
     """Convert float values to Decimal for DynamoDB"""
     if isinstance(obj, float):
@@ -48,7 +44,6 @@ def float_to_decimal(obj):
         return [float_to_decimal(item) for item in obj]
     return obj
 
-# Helper function to convert Decimals to floats for JSON serialization
 def decimal_to_float(obj):
     """Convert Decimal values to float for JSON serialization"""
     if isinstance(obj, Decimal):
@@ -67,7 +62,6 @@ class DynamoDBModel:
         """Get current timestamp in ISO format"""
         return datetime.utcnow().isoformat()
 
-# User Model
 class User(DynamoDBModel):
     @staticmethod
     def create(user_id, name, email, password_hash, user_type, saved_address=None):
@@ -113,7 +107,6 @@ class User(DynamoDBModel):
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# Baker Model
 class Baker(DynamoDBModel):
     @staticmethod
     def create(baker_id, user_id, shop_name, owner_name, phone, business_license, tax_id,
@@ -177,7 +170,6 @@ class Baker(DynamoDBModel):
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# Product Model
 class Product(DynamoDBModel):
     @staticmethod
     def create(product_id, baker_id, name, category, price, description='', image_url='', in_stock=True):
@@ -240,7 +232,6 @@ class Product(DynamoDBModel):
         """Delete a product"""
         products_table.delete_item(Key={'id': str(product_id)})
 
-# Order Model
 class Order(DynamoDBModel):
     @staticmethod
     def create(order_db_id, order_id, user_id, total_amount, delivery_address, 
@@ -294,7 +285,6 @@ class Order(DynamoDBModel):
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# OrderItem Model
 class OrderItem(DynamoDBModel):
     @staticmethod
     def create(item_id, order_db_id, product_id, product_name, baker_name, quantity, price):
@@ -320,7 +310,6 @@ class OrderItem(DynamoDBModel):
         )
         return decimal_to_float(response.get('Items', []))
 
-# Review Model
 class Review(DynamoDBModel):
     @staticmethod
     def create(review_id, user_id, product_id, baker_id, rating, comment, baker_reply='', reply_at=''):
@@ -371,7 +360,6 @@ class Review(DynamoDBModel):
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# Wishlist Model
 class Wishlist(DynamoDBModel):
     @staticmethod
     def create(wishlist_id, user_id, product_id):
@@ -408,7 +396,6 @@ class Wishlist(DynamoDBModel):
         """Delete a wishlist item"""
         wishlist_table.delete_item(Key={'id': str(wishlist_id)})
 
-# Notification Model
 class Notification(DynamoDBModel):
     @staticmethod
     def create(notification_id, user_id, title, message, notification_type='info', 
@@ -434,7 +421,7 @@ class Notification(DynamoDBModel):
             IndexName='user_id-index',
             KeyConditionExpression=Key('user_id').eq(str(user_id)),
             Limit=limit,
-            ScanIndexForward=False  # Sort by created_at descending
+            ScanIndexForward=False  
         )
         return response.get('Items', [])
     
@@ -452,7 +439,6 @@ class Notification(DynamoDBModel):
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# Admin Model
 class Admin(DynamoDBModel):
     @staticmethod
     def create(admin_id, username, email, password_hash, full_name, role='admin', is_active=True):
@@ -494,7 +480,6 @@ class Admin(DynamoDBModel):
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# Helper function to generate unique IDs
 def generate_id():
     """Generate a unique ID using timestamp and random component"""
     import time
