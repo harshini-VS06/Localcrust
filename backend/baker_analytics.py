@@ -33,15 +33,13 @@ def verify_baker_token(request):
     if not payload or payload.get('user_type') != 'baker':
         return None
     
-    # Get baker profile
     user = User.query.get(payload['user_id'])
     if not user or not user.baker_profile:
         return None
     
     return user.baker_profile
 
-# Currency configuration
-CURRENCY_SYMBOL = '₹'  # Indian Rupee
+CURRENCY_SYMBOL = '₹'  
 CURRENCY_CODE = 'INR'
 
 @baker_analytics_bp.route('/baker/analytics/revenue-trends', methods=['GET'])
@@ -52,14 +50,10 @@ def get_revenue_trends():
         if not baker:
             return jsonify({'error': 'Unauthorized'}), 401
         
-        # Get date range (last 6 months by default)
         months = int(request.args.get('months', 6))
-        
-        # Calculate start date
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=30 * months)
         
-        # Get orders for this baker's products
         orders = db.session.query(
             func.strftime('%Y-%m', Order.created_at).label('month'),
             func.sum(OrderItem.price * OrderItem.quantity).label('revenue'),
@@ -70,7 +64,6 @@ def get_revenue_trends():
             Order.payment_status == 'completed'
         ).group_by('month').order_by('month').all()
         
-        # Format data
         revenue_data = []
         for order in orders:
             month_date = datetime.strptime(order.month, '%Y-%m')
@@ -99,7 +92,6 @@ def get_top_products():
         
         limit = int(request.args.get('limit', 10))
         
-        # Get top products by sales volume
         top_products = db.session.query(
             Product.id,
             Product.name,
@@ -142,7 +134,6 @@ def get_peak_hours():
         if not baker:
             return jsonify({'error': 'Unauthorized'}), 401
         
-        # Get orders by hour
         orders_by_hour = db.session.query(
             func.strftime('%H', Order.created_at).label('hour'),
             func.count(Order.id).label('order_count')
@@ -151,7 +142,6 @@ def get_peak_hours():
             Order.payment_status == 'completed'
         ).group_by('hour').all()
         
-        # Format data
         peak_hours_data = []
         for hour_data in orders_by_hour:
             hour = int(hour_data.hour)
@@ -180,7 +170,6 @@ def get_category_distribution():
         if not baker:
             return jsonify({'error': 'Unauthorized'}), 401
         
-        # Get sales by category
         category_sales = db.session.query(
             Product.category,
             func.sum(OrderItem.quantity).label('total_sales'),
@@ -218,7 +207,6 @@ def get_customer_insights():
         if not baker:
             return jsonify({'error': 'Unauthorized'}), 401
         
-        # Total unique customers
         total_customers = db.session.query(
             func.count(func.distinct(Order.user_id))
         ).join(OrderItem).join(Product).filter(
@@ -226,7 +214,6 @@ def get_customer_insights():
             Order.payment_status == 'completed'
         ).scalar()
         
-        # Repeat customers (customers with more than 1 order)
         repeat_customers = db.session.query(
             Order.user_id,
             func.count(Order.id).label('order_count')
@@ -235,7 +222,6 @@ def get_customer_insights():
             Order.payment_status == 'completed'
         ).group_by(Order.user_id).having(func.count(Order.id) > 1).count()
         
-        # Average order value
         avg_order_value = db.session.query(
             func.avg(Order.total_amount)
         ).join(OrderItem).join(Product).filter(
@@ -243,7 +229,6 @@ def get_customer_insights():
             Order.payment_status == 'completed'
         ).scalar() or 0
         
-        # Top customers
         top_customers = db.session.query(
             User.name,
             User.email,
@@ -278,8 +263,6 @@ def get_customer_insights():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# REMOVED: Duplicate route moved to baker_reviews.py
-# The baker_reviews blueprint handles all review-related functionality
 
 @baker_analytics_bp.route('/baker/inventory', methods=['GET'])
 def get_inventory():
@@ -293,7 +276,6 @@ def get_inventory():
         
         inventory_data = []
         for product in products:
-            # Get sales in last 7 days
             week_ago = datetime.utcnow() - timedelta(days=7)
             weekly_sales = db.session.query(
                 func.sum(OrderItem.quantity)
@@ -333,12 +315,10 @@ def get_order_history():
         if not baker:
             return jsonify({'error': 'Unauthorized'}), 401
         
-        # Get query parameters for filtering
         status = request.args.get('status')
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         
-        # Build query
         query = db.session.query(Order).join(OrderItem).join(Product).filter(
             Product.baker_id == baker.id
         )
@@ -354,7 +334,6 @@ def get_order_history():
         
         orders = query.order_by(desc(Order.created_at)).all()
         
-        # Remove duplicates (since join might create duplicates)
         unique_orders = {order.id: order for order in orders}
         orders = list(unique_orders.values())
         
