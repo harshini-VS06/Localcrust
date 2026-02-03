@@ -42,8 +42,11 @@ load_dotenv()
 
 app = Flask(__name__)
 
-allowed_origins = os.getenv('CORS_ORIGINS', 'https://yourdomain.com').split(',')
-CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
+allowed_origins = os.getenv('CORS_ORIGINS', '*')
+if allowed_origins == '*':
+    CORS(app, resources={r"/*": {"origins": "*"}})
+else:
+    CORS(app, resources={r"/*": {"origins": allowed_origins.split(',')}})
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'CHANGE-THIS-IN-PRODUCTION')
 
