@@ -62,7 +62,7 @@ class DynamoDBModel:
         """Get current timestamp in ISO format"""
         return datetime.utcnow().isoformat()
 
-class Users(DynamoDBModel):
+class User(DynamoDBModel):
     @staticmethod
     def create(user_id, name, email, password_hash, user_type, saved_address=None):
         """Create a new user"""
