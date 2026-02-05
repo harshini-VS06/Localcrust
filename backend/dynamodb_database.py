@@ -294,7 +294,7 @@ class OrderItem(DynamoDBModel):
     def create(item_id, order_id, product_id, product_name, baker_name, quantity, price):
         item = float_to_decimal({
             'item_id': str(item_id),
-            'order_id': str(order_id),   # ✅ matches Orders PK
+            'order_id': str(order_id),
             'product_id': str(product_id),
             'product_name': product_name,
             'baker_name': baker_name,
@@ -303,9 +303,9 @@ class OrderItem(DynamoDBModel):
         })
         order_items_table.put_item(Item=item)
         return decimal_to_float(item)
-        
-      @staticmethod
-      def get_by_order_id(order_id):
+
+    @staticmethod
+    def get_by_order_id(order_id):
         response = order_items_table.query(
             IndexName='order_id-index',
             KeyConditionExpression=Key('order_id').eq(str(order_id))
@@ -366,10 +366,9 @@ class Wishlist(DynamoDBModel):
 
     @staticmethod
     def create(user_id, product_id):
-        """Create a new wishlist item"""
         item = {
-            'user_id': str(user_id),       # PK
-            'product_id': str(product_id), # SK
+            'user_id': str(user_id),
+            'product_id': str(product_id),
             'created_at': Wishlist.get_timestamp()
         }
         wishlist_table.put_item(Item=item)
@@ -377,7 +376,6 @@ class Wishlist(DynamoDBModel):
 
     @staticmethod
     def get_by_user_id(user_id):
-        """Get all wishlist items for a user"""
         response = wishlist_table.query(
             KeyConditionExpression=Key('user_id').eq(str(user_id))
         )
@@ -385,7 +383,6 @@ class Wishlist(DynamoDBModel):
 
     @staticmethod
     def get_by_user_and_product(user_id, product_id):
-        """Check if product is in user's wishlist"""
         response = wishlist_table.get_item(
             Key={
                 'user_id': str(user_id),
@@ -396,7 +393,6 @@ class Wishlist(DynamoDBModel):
 
     @staticmethod
     def delete(user_id, product_id):
-        """Delete a wishlist item"""
         wishlist_table.delete_item(
             Key={
                 'user_id': str(user_id),
