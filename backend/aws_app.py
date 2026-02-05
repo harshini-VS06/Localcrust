@@ -25,7 +25,7 @@ except Exception as e:
     SNS_ENABLED = False
 
 from dynamodb_database import (
-    Users, Bakers, Products, Orders, OrderItems, Reviews, Wishlists, 
+    Users, Bakers, Products, Orders, OrderItems, Reviews, Wishlist, 
     Notifications, Admins, generate_id
 )
 
