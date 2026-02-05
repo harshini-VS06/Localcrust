@@ -25,8 +25,8 @@ except Exception as e:
     SNS_ENABLED = False
 
 from dynamodb_database import (
-    Users, Bakers, Products, Orders, OrderItems, Reviews, Wishlist, 
-    Notifications, Admins, generate_id
+    User, Baker, Product, Order, OrderItems, Review, Wishlist, 
+    Notification, Admin, generate_id
 )
 
 try:
@@ -1127,51 +1127,58 @@ def get_baker_orders():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# =========================
+# Wishlist Routes
+# =========================
+
 @app.route('/api/wishlist', methods=['GET'])
 def get_wishlist():
-    """Get user's wishlist"""
+    """Get logged-in user's wishlist"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
-        
+
         token = auth_header.split(' ')[1]
         payload = verify_token(token)
-        
+
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
-        
+
         wishlist_items = Wishlist.get_by_user_id(payload['user_id'])
-        
+
         result = []
         for item in wishlist_items:
             product = Product.get_by_id(item['product_id'])
-            if product:
-                baker = Baker.get_by_id(product['baker_id'])
-                result.append({
-                    'id': item['id'],
-                    'product_id': item['product_id'],
-                    'product': {
-                        'id': product['id'],
-                        'name': product['name'],
-                        'category': product['category'],
-                        'price': product['price'],
-                        'description': product['description'],
-                        'image_url': product.get('image_url', ''),
-                        'in_stock': product['in_stock'],
-                        'baker': {
-                            'id': baker['id'],
-                            'shop_name': baker['shop_name'],
-                            'city': baker['city']
-                        } if baker else None
-                    },
-                    'created_at': item['created_at']
-                })
-        
+            if not product:
+                continue
+
+            baker = Baker.get_by_id(product['baker_id'])
+
+            result.append({
+                'product_id': item['product_id'],
+                'created_at': item['created_at'],
+                'product': {
+                    'id': product['id'],
+                    'name': product['name'],
+                    'category': product['category'],
+                    'price': product['price'],
+                    'description': product['description'],
+                    'image_url': product.get('image_url', ''),
+                    'in_stock': product['in_stock'],
+                    'baker': {
+                        'id': baker['id'],
+                        'shop_name': baker['shop_name'],
+                        'city': baker['city']
+                    } if baker else None
+                }
+            })
+
         return jsonify({'wishlist': result}), 200
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/wishlist/<int:product_id>', methods=['POST'])
 def add_to_wishlist(product_id):
@@ -1180,39 +1187,38 @@ def add_to_wishlist(product_id):
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
-        
+
         token = auth_header.split(' ')[1]
         payload = verify_token(token)
-        
+
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
-        
+
         product = Product.get_by_id(str(product_id))
         if not product:
             return jsonify({'error': 'Product not found'}), 404
-        
-        existing = Wishlist.get_by_user_and_product(payload['user_id'], str(product_id))
-        
+
+        existing = Wishlist.get_by_user_and_product(
+            payload['user_id'],
+            str(product_id)
+        )
+
         if existing:
             return jsonify({'message': 'Product already in wishlist'}), 200
-        
-        wishlist_id = generate_id()
-        wishlist_item = Wishlist.create(
-            wishlist_id=wishlist_id,
+
+        Wishlist.create(
             user_id=payload['user_id'],
             product_id=str(product_id)
         )
-        
+
         return jsonify({
             'message': 'Product added to wishlist',
-            'wishlist_item': {
-                'id': wishlist_item['id'],
-                'product_id': wishlist_item['product_id']
-            }
+            'product_id': str(product_id)
         }), 201
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/wishlist/<int:product_id>', methods=['DELETE'])
 def remove_from_wishlist(product_id):
@@ -1221,25 +1227,30 @@ def remove_from_wishlist(product_id):
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
-        
+
         token = auth_header.split(' ')[1]
         payload = verify_token(token)
-        
+
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
-        
-        wishlist_item = Wishlist.get_by_user_and_product(payload['user_id'], str(product_id))
-        
+
+        wishlist_item = Wishlist.get_by_user_and_product(
+            payload['user_id'],
+            str(product_id)
+        )
+
         if not wishlist_item:
             return jsonify({'error': 'Product not in wishlist'}), 404
-        
-        Wishlist.delete(wishlist_item['id'])
-        
+
+        Wishlist.delete(
+            user_id=payload['user_id'],
+            product_id=str(product_id)
+        )
+
         return jsonify({'message': 'Product removed from wishlist'}), 200
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/api/ai/recipe-suggestions', methods=['POST'])
 def get_ai_recipe_suggestions():
