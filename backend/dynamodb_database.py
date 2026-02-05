@@ -233,13 +233,13 @@ class Product(DynamoDBModel):
         products_table.delete_item(Key={'product_id': str(product_id)})
 
 class Order(DynamoDBModel):
+
     @staticmethod
-    def create(order_db_id, order_id, user_id, total_amount, delivery_address, 
+    def create(order_id, user_id, total_amount, delivery_address,
                status='pending', payment_status='pending', payment_id=''):
         """Create a new order"""
         item = float_to_decimal({
-            'id': str(order_db_id),
-            'order_id': order_id,
+            'order_id': str(order_id),          # ✅ DynamoDB PK
             'user_id': str(user_id),
             'total_amount': total_amount,
             'status': status,
@@ -249,49 +249,52 @@ class Order(DynamoDBModel):
             'created_at': Order.get_timestamp(),
             'updated_at': Order.get_timestamp()
         })
+
         orders_table.put_item(Item=item)
         return decimal_to_float(item)
-    
+
     @staticmethod
-    def get_by_id(order_db_id):
-        """Get order by database ID"""
-        response = orders_table.get_item(Key={'id': str(order_db_id)})
+    def get_by_id(order_id):
+        """Get order by order_id"""
+        response = orders_table.get_item(
+            Key={'order_id': str(order_id)}
+        )
         item = response.get('Item')
         return decimal_to_float(item) if item else None
-    
+
     @staticmethod
     def get_by_user_id(user_id):
-        """Get all orders by user ID"""
+        """Get all orders for a user (via GSI)"""
         response = orders_table.query(
             IndexName='user_id-index',
             KeyConditionExpression=Key('user_id').eq(str(user_id))
         )
         return decimal_to_float(response.get('Items', []))
-    
+
     @staticmethod
-    def update(order_db_id, **kwargs):
+    def update(order_id, **kwargs):
         """Update order attributes"""
         kwargs = float_to_decimal(kwargs)
         kwargs['updated_at'] = Order.get_timestamp()
-        
-        update_expression = "SET " + ", ".join([f"#{k} = :{k}" for k in kwargs.keys()])
-        expression_attribute_names = {f"#{k}": k for k in kwargs.keys()}
+
+        update_expression = "SET " + ", ".join([f"#{k} = :{k}" for k in kwargs])
+        expression_attribute_names = {f"#{k}": k for k in kwargs}
         expression_attribute_values = {f":{k}": v for k, v in kwargs.items()}
-        
+
         orders_table.update_item(
-            Key={'id': str(order_db_id)},
+            Key={'order_id': str(order_id)},
             UpdateExpression=update_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=expression_attribute_values
         )
 
 class OrderItem(DynamoDBModel):
+
     @staticmethod
-    def create(item_id, order_db_id, product_id, product_name, baker_name, quantity, price):
-        """Create a new order item"""
+    def create(item_id, order_id, product_id, product_name, baker_name, quantity, price):
         item = float_to_decimal({
             'item_id': str(item_id),
-            'order_id': str(order_db_id),
+            'order_id': str(order_id),   # ✅ matches Orders PK
             'product_id': str(product_id),
             'product_name': product_name,
             'baker_name': baker_name,
@@ -300,13 +303,12 @@ class OrderItem(DynamoDBModel):
         })
         order_items_table.put_item(Item=item)
         return decimal_to_float(item)
-    
-    @staticmethod
-    def get_by_order_id(order_db_id):
-        """Get all items for an order"""
+        
+      @staticmethod
+    def get_by_order_id(order_id):
         response = order_items_table.query(
             IndexName='order_id-index',
-            KeyConditionExpression=Key('order_id').eq(str(order_db_id))
+            KeyConditionExpression=Key('order_id').eq(str(order_id))
         )
         return decimal_to_float(response.get('Items', []))
 
@@ -391,14 +393,14 @@ class Wishlist(DynamoDBModel):
         return items[0] if items else None
     
     @staticmethod
-    def delete(wishlist_id):
-        """Delete a wishlist item"""
-        wishlist_table.delete_item(
-    Key={
-        'user_id': str(user_id),
-        'product_id': str(product_id)
-    }
-)
+    def delete(user_id, product_id):
+    """Delete a wishlist item"""
+    wishlist_table.delete_item(
+        Key={
+            'user_id': str(user_id),
+            'product_id': str(product_id)
+        }
+    )
 
 class Notification(DynamoDBModel):
     @staticmethod
