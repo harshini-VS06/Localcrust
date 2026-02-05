@@ -62,7 +62,7 @@ class DynamoDBModel:
         """Get current timestamp in ISO format"""
         return datetime.utcnow().isoformat()
 
-class User(DynamoDBModel):
+class Users(DynamoDBModel):
     @staticmethod
     def create(user_id, name, email, password_hash, user_type, saved_address=None):
         """Create a new user"""
@@ -107,7 +107,7 @@ class User(DynamoDBModel):
             ExpressionAttributeValues=expression_attribute_values
         )
 
-class Baker(DynamoDBModel):
+class Bakers(DynamoDBModel):
     @staticmethod
     def create(baker_id, user_id, shop_name, owner_name, phone, business_license, tax_id,
                shop_address, city, state, zip_code, shop_description, license_document='', verified=False):
@@ -170,7 +170,7 @@ class Baker(DynamoDBModel):
             ExpressionAttributeValues=expression_attribute_values
         )
 
-class Product(DynamoDBModel):
+class Products(DynamoDBModel):
     @staticmethod
     def create(product_id, baker_id, name, category, price, description='', image_url='', in_stock=True):
         """Create a new product"""
@@ -232,7 +232,7 @@ class Product(DynamoDBModel):
         """Delete a product"""
         products_table.delete_item(Key={'id': str(product_id)})
 
-class Order(DynamoDBModel):
+class Orders(DynamoDBModel):
     @staticmethod
     def create(order_db_id, order_id, user_id, total_amount, delivery_address, 
                status='pending', payment_status='pending', payment_id=''):
@@ -285,7 +285,7 @@ class Order(DynamoDBModel):
             ExpressionAttributeValues=expression_attribute_values
         )
 
-class OrderItem(DynamoDBModel):
+class OrderItems(DynamoDBModel):
     @staticmethod
     def create(item_id, order_db_id, product_id, product_name, baker_name, quantity, price):
         """Create a new order item"""
@@ -310,7 +310,7 @@ class OrderItem(DynamoDBModel):
         )
         return decimal_to_float(response.get('Items', []))
 
-class Review(DynamoDBModel):
+class Reviews(DynamoDBModel):
     @staticmethod
     def create(review_id, user_id, product_id, baker_id, rating, comment, baker_reply='', reply_at=''):
         """Create a new review"""
@@ -396,7 +396,7 @@ class Wishlist(DynamoDBModel):
         """Delete a wishlist item"""
         wishlist_table.delete_item(Key={'id': str(wishlist_id)})
 
-class Notification(DynamoDBModel):
+class Notifications(DynamoDBModel):
     @staticmethod
     def create(notification_id, user_id, title, message, notification_type='info', 
                read=False, related_review_id=''):
@@ -439,7 +439,7 @@ class Notification(DynamoDBModel):
             ExpressionAttributeValues=expression_attribute_values
         )
 
-class Admin(DynamoDBModel):
+class Admins(DynamoDBModel):
     @staticmethod
     def create(admin_id, username, email, password_hash, full_name, role='admin', is_active=True):
         """Create a new admin"""
