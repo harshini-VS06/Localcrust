@@ -25,7 +25,7 @@ except Exception as e:
     SNS_ENABLED = False
 
 from dynamodb_database import (
-    User, Baker, Product, Order, OrderItems, Review, Wishlist, 
+    User, Baker, Product, Order, OrderItem, Review, Wishlist, 
     Notification, Admin, generate_id
 )
 
@@ -619,7 +619,7 @@ def create_order():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/orders/<int:order_id>/payment', methods=['PUT'])
+@app.route('/api/orders/<order_id>/payment', methods=['PUT'])
 def update_payment_status(order_id):
     """Update payment status for an order"""
     try:
