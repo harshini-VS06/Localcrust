@@ -305,7 +305,7 @@ class OrderItem(DynamoDBModel):
         return decimal_to_float(item)
         
       @staticmethod
-    def get_by_order_id(order_id):
+      def get_by_order_id(order_id):
         response = order_items_table.query(
             IndexName='order_id-index',
             KeyConditionExpression=Key('order_id').eq(str(order_id))
@@ -363,44 +363,46 @@ class Review(DynamoDBModel):
         )
 
 class Wishlist(DynamoDBModel):
+
     @staticmethod
-    def create(wishlist_id, user_id, product_id):
+    def create(user_id, product_id):
         """Create a new wishlist item"""
         item = {
-             'user_id': str(user_id),
-             'product_id': str(product_id),
-             'created_at': Wishlist.get_timestamp()
+            'user_id': str(user_id),       # PK
+            'product_id': str(product_id), # SK
+            'created_at': Wishlist.get_timestamp()
         }
         wishlist_table.put_item(Item=item)
         return item
-    
+
     @staticmethod
     def get_by_user_id(user_id):
         """Get all wishlist items for a user"""
         response = wishlist_table.query(
-            IndexName='user_id-index',
             KeyConditionExpression=Key('user_id').eq(str(user_id))
         )
         return response.get('Items', [])
-    
+
     @staticmethod
     def get_by_user_and_product(user_id, product_id):
         """Check if product is in user's wishlist"""
-        response = wishlist_table.scan(
-            FilterExpression=Attr('user_id').eq(str(user_id)) & Attr('product_id').eq(str(product_id))
+        response = wishlist_table.get_item(
+            Key={
+                'user_id': str(user_id),
+                'product_id': str(product_id)
+            }
         )
-        items = response.get('Items', [])
-        return items[0] if items else None
-    
+        return response.get('Item')
+
     @staticmethod
     def delete(user_id, product_id):
-    """Delete a wishlist item"""
-    wishlist_table.delete_item(
-        Key={
-            'user_id': str(user_id),
-            'product_id': str(product_id)
-        }
-    )
+        """Delete a wishlist item"""
+        wishlist_table.delete_item(
+            Key={
+                'user_id': str(user_id),
+                'product_id': str(product_id)
+            }
+        )
 
 class Notification(DynamoDBModel):
     @staticmethod
