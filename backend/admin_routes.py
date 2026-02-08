@@ -7,7 +7,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import jwt
 from functools import wraps
-from database import db, Admin, User, Baker, Product, Order, Review
+from database import db, Admin, User, Baker, Product, Order, Review, Payment, OrderItem
 from sqlalchemy import func, desc
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
@@ -118,7 +118,7 @@ def get_admin_profile():
     }), 200
 
 # Dashboard Statistics
-@admin_bp.route('/dashboard/stats', methods=['GET'])
+@admin_bp.route('/stats', methods=['GET'])
 @admin_required
 def get_dashboard_stats():
     """Get dashboard statistics"""
@@ -131,49 +131,24 @@ def get_dashboard_stats():
         
         # Verified vs unverified bakers
         verified_bakers = Baker.query.filter_by(verified=True).count()
-        unverified_bakers = Baker.query.filter_by(verified=False).count()
+        pending_bakers = Baker.query.filter_by(verified=False).count()
         
         # Revenue calculation
         completed_orders = Order.query.filter_by(payment_status='completed').all()
         total_revenue = sum(order.total_amount for order in completed_orders)
         
-        # Recent orders
-        recent_orders = Order.query.order_by(desc(Order.created_at)).limit(5).all()
-        
-        # Order status breakdown
-        order_statuses = db.session.query(
-            Order.status, 
-            func.count(Order.id)
-        ).group_by(Order.status).all()
-        
-        # Recent reviews
-        recent_reviews = Review.query.order_by(desc(Review.created_at)).limit(5).all()
+        # Pending orders count
+        pending_orders = Order.query.filter_by(status='pending').count()
         
         return jsonify({
             'total_users': total_users,
             'total_bakers': total_bakers,
             'verified_bakers': verified_bakers,
-            'unverified_bakers': unverified_bakers,
+            'pending_bakers': pending_bakers,
             'total_products': total_products,
             'total_orders': total_orders,
-            'total_revenue': total_revenue,
-            'order_statuses': [{'status': status, 'count': count} for status, count in order_statuses],
-            'recent_orders': [{
-                'id': order.id,
-                'order_id': order.order_id,
-                'user_id': order.user_id,
-                'total_amount': order.total_amount,
-                'status': order.status,
-                'created_at': order.created_at.isoformat()
-            } for order in recent_orders],
-            'recent_reviews': [{
-                'id': review.id,
-                'user_id': review.user_id,
-                'product_id': review.product_id,
-                'rating': review.rating,
-                'comment': review.comment,
-                'created_at': review.created_at.isoformat()
-            } for review in recent_reviews]
+            'pending_orders': pending_orders,
+            'total_revenue': total_revenue
         }), 200
         
     except Exception as e:
@@ -183,27 +158,20 @@ def get_dashboard_stats():
 @admin_bp.route('/users', methods=['GET'])
 @admin_required
 def get_all_users():
-    """Get all users with pagination"""
+    """Get all customer users"""
     try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        user_type = request.args.get('user_type', 'customer')
-        
-        users = User.query.filter_by(user_type=user_type).paginate(
-            page=page, per_page=per_page, error_out=False
-        )
+        users = User.query.filter_by(user_type='customer').all()
         
         return jsonify({
             'users': [{
-                'id': user.id,
+                'id': str(user.id),
                 'name': user.name,
                 'email': user.email,
                 'user_type': user.user_type,
+                'is_blocked': user.is_blocked if hasattr(user, 'is_blocked') else False,
+                'total_orders': len(user.orders),
                 'created_at': user.created_at.isoformat()
-            } for user in users.items],
-            'total': users.total,
-            'pages': users.pages,
-            'current_page': page
+            } for user in users]
         }), 200
         
     except Exception as e:
@@ -224,303 +192,60 @@ def get_user_details(user_id):
             'name': user.name,
             'email': user.email,
             'user_type': user.user_type,
+            'is_blocked': user.is_blocked if hasattr(user, 'is_blocked') else False,
             'created_at': user.created_at.isoformat(),
             'total_orders': len(user.orders),
             'total_reviews': len(user.reviews)
         }
-        
-        # Add baker profile if user is a baker
-        if user.user_type == 'baker' and user.baker_profile:
-            baker = user.baker_profile
-            user_data['baker_profile'] = {
-                'id': baker.id,
-                'shop_name': baker.shop_name,
-                'owner_name': baker.owner_name,
-                'phone': baker.phone,
-                'city': baker.city,
-                'state': baker.state,
-                'verified': baker.verified,
-                'total_products': len(baker.products)
-            }
         
         return jsonify(user_data), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Baker Management
-@admin_bp.route('/bakers', methods=['GET'])
+@admin_bp.route('/users', methods=['POST'])
 @admin_required
-def get_all_bakers():
-    """Get all bakers with filtering"""
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        verified = request.args.get('verified')
-        
-        query = Baker.query
-        
-        if verified is not None:
-            verified_bool = verified.lower() == 'true'
-            query = query.filter_by(verified=verified_bool)
-        
-        bakers = query.paginate(page=page, per_page=per_page, error_out=False)
-        
-        return jsonify({
-            'bakers': [{
-                'id': baker.id,
-                'shop_name': baker.shop_name,
-                'owner_name': baker.owner_name,
-                'phone': baker.phone,
-                'city': baker.city,
-                'state': baker.state,
-                'verified': baker.verified,
-                'total_products': len(baker.products),
-                'created_at': baker.created_at.isoformat()
-            } for baker in bakers.items],
-            'total': bakers.total,
-            'pages': bakers.pages,
-            'current_page': page
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@admin_bp.route('/bakers/<int:baker_id>', methods=['GET'])
-@admin_required
-def get_baker_details(baker_id):
-    """Get detailed baker information"""
-    try:
-        baker = Baker.query.get(baker_id)
-        
-        if not baker:
-            return jsonify({'error': 'Baker not found'}), 404
-        
-        return jsonify({
-            'id': baker.id,
-            'user_id': baker.user_id,
-            'shop_name': baker.shop_name,
-            'owner_name': baker.owner_name,
-            'phone': baker.phone,
-            'business_license': baker.business_license,
-            'tax_id': baker.tax_id,
-            'shop_address': baker.shop_address,
-            'city': baker.city,
-            'state': baker.state,
-            'zip_code': baker.zip_code,
-            'shop_description': baker.shop_description,
-            'verified': baker.verified,
-            'created_at': baker.created_at.isoformat(),
-            'total_products': len(baker.products),
-            'total_reviews': len(baker.reviews)
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@admin_bp.route('/bakers/<int:baker_id>/verify', methods=['PUT'])
-@admin_required
-def verify_baker(baker_id):
-    """Verify or unverify a baker"""
+def create_user():
+    """Create a new customer user"""
     try:
         data = request.get_json()
-        baker = Baker.query.get(baker_id)
         
-        if not baker:
-            return jsonify({'error': 'Baker not found'}), 404
+        # Validate required fields
+        required_fields = ['name', 'email', 'password']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        baker.verified = data.get('verified', True)
-        db.session.commit()
+        # Check if user already exists
+        if User.query.filter_by(email=data['email']).first():
+            return jsonify({'error': 'Email already registered'}), 400
         
-        return jsonify({
-            'message': f'Baker {"verified" if baker.verified else "unverified"} successfully',
-            'baker': {
-                'id': baker.id,
-                'shop_name': baker.shop_name,
-                'verified': baker.verified
-            }
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-# Product Management
-@admin_bp.route('/products', methods=['GET'])
-@admin_required
-def get_all_products():
-    """Get all products"""
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        
-        products = Product.query.paginate(page=page, per_page=per_page, error_out=False)
-        
-        return jsonify({
-            'products': [{
-                'id': product.id,
-                'name': product.name,
-                'category': product.category,
-                'price': product.price,
-                'baker_id': product.baker_id,
-                'baker_name': product.baker.shop_name,
-                'in_stock': product.in_stock,
-                'created_at': product.created_at.isoformat()
-            } for product in products.items],
-            'total': products.total,
-            'pages': products.pages,
-            'current_page': page
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@admin_bp.route('/products/<int:product_id>', methods=['DELETE'])
-@admin_required
-def delete_product(product_id):
-    """Delete a product"""
-    try:
-        product = Product.query.get(product_id)
-        
-        if not product:
-            return jsonify({'error': 'Product not found'}), 404
-        
-        db.session.delete(product)
-        db.session.commit()
-        
-        return jsonify({'message': 'Product deleted successfully'}), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-# Order Management
-@admin_bp.route('/orders', methods=['GET'])
-@admin_required
-def get_all_orders():
-    """Get all orders with filtering"""
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        status = request.args.get('status')
-        
-        query = Order.query
-        
-        if status:
-            query = query.filter_by(status=status)
-        
-        orders = query.order_by(desc(Order.created_at)).paginate(
-            page=page, per_page=per_page, error_out=False
+        # Create new user
+        user = User(
+            name=data['name'],
+            email=data['email'],
+            password_hash=generate_password_hash(data['password']),
+            user_type='customer',
+            is_blocked=False
         )
         
-        return jsonify({
-            'orders': [{
-                'id': order.id,
-                'order_id': order.order_id,
-                'user_id': order.user_id,
-                'user_name': order.user.name,
-                'total_amount': order.total_amount,
-                'status': order.status,
-                'payment_status': order.payment_status,
-                'created_at': order.created_at.isoformat()
-            } for order in orders.items],
-            'total': orders.total,
-            'pages': orders.pages,
-            'current_page': page
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@admin_bp.route('/orders/<int:order_id>', methods=['GET'])
-@admin_required
-def get_order_details(order_id):
-    """Get detailed order information"""
-    try:
-        order = Order.query.get(order_id)
-        
-        if not order:
-            return jsonify({'error': 'Order not found'}), 404
+        db.session.add(user)
+        db.session.commit()
         
         return jsonify({
-            'id': order.id,
-            'order_id': order.order_id,
+            'message': 'User created successfully',
             'user': {
-                'id': order.user.id,
-                'name': order.user.name,
-                'email': order.user.email
-            },
-            'total_amount': order.total_amount,
-            'status': order.status,
-            'payment_status': order.payment_status,
-            'payment_id': order.payment_id,
-            'delivery_address': order.delivery_address,
-            'created_at': order.created_at.isoformat(),
-            'updated_at': order.updated_at.isoformat(),
-            'items': [{
-                'id': item.id,
-                'product_name': item.product_name,
-                'baker_name': item.baker_name,
-                'quantity': item.quantity,
-                'price': item.price
-            } for item in order.items]
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# Review Management
-@admin_bp.route('/reviews', methods=['GET'])
-@admin_required
-def get_all_reviews():
-    """Get all reviews"""
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        
-        reviews = Review.query.order_by(desc(Review.created_at)).paginate(
-            page=page, per_page=per_page, error_out=False
-        )
-        
-        return jsonify({
-            'reviews': [{
-                'id': review.id,
-                'user_name': review.user.name,
-                'product_name': review.product.name,
-                'baker_name': review.baker.shop_name,
-                'rating': review.rating,
-                'comment': review.comment,
-                'baker_reply': review.baker_reply,
-                'created_at': review.created_at.isoformat()
-            } for review in reviews.items],
-            'total': reviews.total,
-            'pages': reviews.pages,
-            'current_page': page
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@admin_bp.route('/reviews/<int:review_id>', methods=['DELETE'])
-@admin_required
-def delete_review(review_id):
-    """Delete a review (for inappropriate content)"""
-    try:
-        review = Review.query.get(review_id)
-        
-        if not review:
-            return jsonify({'error': 'Review not found'}), 404
-        
-        db.session.delete(review)
-        db.session.commit()
-        
-        return jsonify({'message': 'Review deleted successfully'}), 200
+                'id': user.id,
+                'name': user.name,
+                'email': user.email,
+                'user_type': user.user_type
+            }
+        }), 201
         
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# User Management - Delete User
 @admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @admin_required
 def delete_user(user_id):
@@ -544,50 +269,164 @@ def delete_user(user_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# User Management - Create User
-@admin_bp.route('/users', methods=['POST'])
+@admin_bp.route('/users/<int:user_id>/block', methods=['PUT'])
 @admin_required
-def create_user():
-    """Create a new customer user"""
+def block_user(user_id):
+    """Block a user account"""
     try:
-        data = request.get_json()
+        user = User.query.get(user_id)
         
-        # Validate required fields
-        required_fields = ['name', 'email', 'password']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({'error': f'Missing required field: {field}'}), 400
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
         
-        # Check if user already exists
-        if User.query.filter_by(email=data['email']).first():
-            return jsonify({'error': 'Email already registered'}), 400
-        
-        # Create new user
-        user = User(
-            name=data['name'],
-            email=data['email'],
-            password_hash=generate_password_hash(data['password']),
-            user_type='customer'
-        )
-        
-        db.session.add(user)
+        user.is_blocked = True
         db.session.commit()
         
         return jsonify({
-            'message': 'User created successfully',
+            'message': 'User blocked successfully',
             'user': {
                 'id': user.id,
                 'name': user.name,
-                'email': user.email,
-                'user_type': user.user_type
+                'is_blocked': user.is_blocked
             }
-        }), 201
+        }), 200
         
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Baker Management - Delete Baker
+@admin_bp.route('/users/<int:user_id>/unblock', methods=['PUT'])
+@admin_required
+def unblock_user(user_id):
+    """Unblock a user account"""
+    try:
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        user.is_blocked = False
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'User unblocked successfully',
+            'user': {
+                'id': user.id,
+                'name': user.name,
+                'is_blocked': user.is_blocked
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# Baker Management
+@admin_bp.route('/bakers/pending', methods=['GET'])
+@admin_required
+def get_pending_bakers():
+    """Get pending bakers awaiting verification"""
+    try:
+        bakers = Baker.query.filter_by(verified=False).all()
+        
+        return jsonify({
+            'bakers': [{
+                'id': str(baker.id),
+                'shop_name': baker.shop_name,
+                'owner_name': baker.owner_name,
+                'phone': baker.phone,
+                'city': baker.city,
+                'state': baker.state,
+                'business_license': baker.business_license,
+                'tax_id': baker.tax_id,
+                'shop_description': baker.shop_description,
+                'verified': baker.verified,
+                'user_email': baker.user.email if baker.user else None,
+                'product_count': len(baker.products)
+            } for baker in bakers]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/bakers', methods=['GET'])
+@admin_required
+def get_all_bakers():
+    """Get all bakers"""
+    try:
+        bakers = Baker.query.all()
+        
+        return jsonify({
+            'bakers': [{
+                'id': str(baker.id),
+                'shop_name': baker.shop_name,
+                'owner_name': baker.owner_name,
+                'phone': baker.phone,
+                'city': baker.city,
+                'state': baker.state,
+                'business_license': baker.business_license,
+                'tax_id': baker.tax_id,
+                'shop_description': baker.shop_description,
+                'verified': baker.verified,
+                'user_email': baker.user.email if baker.user else None,
+                'product_count': len(baker.products)
+            } for baker in bakers]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/bakers/<string:baker_id>/verify', methods=['PUT'])
+@admin_required
+def verify_baker(baker_id):
+    """Verify a baker"""
+    try:
+        baker = Baker.query.get(int(baker_id))
+        
+        if not baker:
+            return jsonify({'error': 'Baker not found'}), 404
+        
+        baker.verified = True
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Baker verified successfully',
+            'baker': {
+                'id': baker.id,
+                'shop_name': baker.shop_name,
+                'verified': baker.verified
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/bakers/<string:baker_id>/reject', methods=['PUT'])
+@admin_required
+def reject_baker(baker_id):
+    """Reject a baker application"""
+    try:
+        data = request.get_json()
+        baker = Baker.query.get(int(baker_id))
+        
+        if not baker:
+            return jsonify({'error': 'Baker not found'}), 404
+        
+        user = baker.user
+        db.session.delete(baker)
+        if user:
+            db.session.delete(user)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Baker application rejected'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @admin_bp.route('/bakers/<int:baker_id>', methods=['DELETE'])
 @admin_required
 def delete_baker(baker_id):
@@ -598,13 +437,9 @@ def delete_baker(baker_id):
         if not baker:
             return jsonify({'error': 'Baker not found'}), 404
         
-        # Get the user account
         user = User.query.get(baker.user_id)
         
-        # Delete baker profile first (cascade will handle products)
         db.session.delete(baker)
-        
-        # Delete associated user account
         if user:
             db.session.delete(user)
         
@@ -616,7 +451,6 @@ def delete_baker(baker_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Baker Management - Create Baker
 @admin_bp.route('/bakers', methods=['POST'])
 @admin_required
 def create_baker():
@@ -624,7 +458,6 @@ def create_baker():
     try:
         data = request.get_json()
         
-        # Validate required fields
         required_fields = ['email', 'password', 'shop_name', 'owner_name', 'phone', 
                           'business_license', 'tax_id', 'shop_address', 'city', 'state', 
                           'zip_code', 'shop_description']
@@ -632,22 +465,20 @@ def create_baker():
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Check if email already exists
         if User.query.filter_by(email=data['email']).first():
             return jsonify({'error': 'Email already registered'}), 400
         
-        # Create user account
         user = User(
             name=data['owner_name'],
             email=data['email'],
             password_hash=generate_password_hash(data['password']),
-            user_type='baker'
+            user_type='baker',
+            is_blocked=False
         )
         
         db.session.add(user)
-        db.session.flush()  # Get user.id
+        db.session.flush()
         
-        # Create baker profile
         baker = Baker(
             user_id=user.id,
             shop_name=data['shop_name'],
@@ -680,4 +511,197 @@ def create_baker():
         
     except Exception as e:
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# Order Management
+@admin_bp.route('/orders', methods=['GET'])
+@admin_required
+def get_all_orders():
+    """Get all orders"""
+    try:
+        orders = Order.query.order_by(desc(Order.created_at)).all()
+        
+        return jsonify({
+            'orders': [{
+                'id': str(order.id),
+                'order_id': order.order_id,
+                'customer_name': order.user.name if order.user else 'Unknown User',
+                'customer_email': order.user.email if order.user else 'N/A',
+                'total_amount': order.total_amount,
+                'status': order.status,
+                'payment_status': order.payment_status,
+                'created_at': order.created_at.isoformat(),
+                'items': [{
+                    'product_id': item.product_id,
+                    'product_name': item.product_name,
+                    'baker_name': item.baker_name,
+                    'quantity': item.quantity,
+                    'price': item.price
+                } for item in order.items]
+            } for order in orders]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Review Management
+@admin_bp.route('/reviews', methods=['GET'])
+@admin_required
+def get_all_reviews():
+    """Get all reviews"""
+    try:
+        reviews = Review.query.order_by(desc(Review.created_at)).all()
+        
+        return jsonify({
+            'reviews': [{
+                'id': str(review.id),
+                'user_name': review.user.name if review.user else 'Unknown',
+                'product_name': review.product.name if review.product else 'Unknown',
+                'rating': review.rating,
+                'comment': review.comment,
+                'baker_reply': review.baker_reply,
+                'created_at': review.created_at.isoformat()
+            } for review in reviews]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Sales Reports
+@admin_bp.route('/reports/sales', methods=['GET'])
+@admin_required
+def get_sales_report():
+    """Get sales report with revenue breakdown"""
+    try:
+        # Get completed orders only
+        completed_orders = Order.query.filter_by(payment_status='completed').all()
+        total_revenue = sum(order.total_amount for order in completed_orders)
+        total_orders = len(completed_orders)
+        
+        # Revenue by baker
+        baker_revenue = {}
+        for order in completed_orders:
+            for item in order.items:
+                if item.product and item.product.baker:
+                    baker = item.product.baker
+                    baker_id = str(baker.id)
+                    
+                    if baker_id not in baker_revenue:
+                        baker_revenue[baker_id] = {
+                            'baker_id': baker_id,
+                            'baker_name': baker.shop_name,
+                            'revenue': 0,
+                            'orders': set()
+                        }
+                    
+                    baker_revenue[baker_id]['revenue'] += item.price * item.quantity
+                    baker_revenue[baker_id]['orders'].add(order.id)
+        
+        # Convert to list
+        revenue_by_baker = []
+        for baker_data in baker_revenue.values():
+            revenue_by_baker.append({
+                'baker_id': baker_data['baker_id'],
+                'baker_name': baker_data['baker_name'],
+                'revenue': baker_data['revenue'],
+                'orders': len(baker_data['orders'])
+            })
+        
+        revenue_by_baker.sort(key=lambda x: x['revenue'], reverse=True)
+        
+        # Top products
+        product_stats = {}
+        for order in completed_orders:
+            for item in order.items:
+                product_id = str(item.product_id) if item.product_id else 'unknown'
+                product_name = item.product_name
+                
+                if product_id not in product_stats:
+                    product_stats[product_id] = {
+                        'product_id': product_id,
+                        'product_name': product_name,
+                        'quantity_sold': 0,
+                        'revenue': 0
+                    }
+                
+                product_stats[product_id]['quantity_sold'] += item.quantity
+                product_stats[product_id]['revenue'] += item.price * item.quantity
+        
+        top_products = sorted(
+            product_stats.values(),
+            key=lambda x: x['revenue'],
+            reverse=True
+        )[:10]
+        
+        return jsonify({
+            'total_revenue': total_revenue,
+            'total_orders': total_orders,
+            'revenue_by_baker': revenue_by_baker,
+            'top_products': top_products
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Payment Monitoring
+@admin_bp.route('/payments', methods=['GET'])
+@admin_required
+def get_all_payments():
+    """Get all Razorpay payment transactions"""
+    try:
+        payments = Payment.query.order_by(desc(Payment.created_at)).all()
+        
+        return jsonify({
+            'payments': [{
+                'id': str(payment.id),
+                'order_id': payment.order_id,
+                'order_number': payment.order.order_id if payment.order else 'N/A',
+                'razorpay_order_id': payment.razorpay_order_id,
+                'razorpay_payment_id': payment.razorpay_payment_id or 'N/A',
+                'amount': payment.amount,
+                'currency': payment.currency,
+                'status': payment.status,
+                'method': payment.method or 'N/A',
+                'email': payment.email or 'N/A',
+                'contact': payment.contact or 'N/A',
+                'error_code': payment.error_code,
+                'error_description': payment.error_description,
+                'created_at': payment.created_at.isoformat(),
+                'updated_at': payment.updated_at.isoformat()
+            } for payment in payments]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/payments/<int:payment_id>', methods=['GET'])
+@admin_required
+def get_payment_details(payment_id):
+    """Get detailed payment information"""
+    try:
+        payment = Payment.query.get(payment_id)
+        
+        if not payment:
+            return jsonify({'error': 'Payment not found'}), 404
+        
+        return jsonify({
+            'id': payment.id,
+            'order_id': payment.order_id,
+            'order_number': payment.order.order_id if payment.order else 'N/A',
+            'razorpay_order_id': payment.razorpay_order_id,
+            'razorpay_payment_id': payment.razorpay_payment_id,
+            'razorpay_signature': payment.razorpay_signature,
+            'amount': payment.amount,
+            'currency': payment.currency,
+            'status': payment.status,
+            'method': payment.method,
+            'email': payment.email,
+            'contact': payment.contact,
+            'error_code': payment.error_code,
+            'error_description': payment.error_description,
+            'created_at': payment.created_at.isoformat(),
+            'updated_at': payment.updated_at.isoformat()
+        }), 200
+        
+    except Exception as e:
         return jsonify({'error': str(e)}), 500

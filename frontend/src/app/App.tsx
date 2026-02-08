@@ -8,11 +8,11 @@ import { BakerProfile } from "@/app/components/baker-profile";
 import { AdminLogin } from "@/app/components/admin-login";
 import { AdminDashboard } from "@/app/components/admin-dashboard";
 
-type View = 'landing' | 'onboarding' | 'login' | 'marketplace' | 'baker-dashboard' | 'baker-profile';
+type View = 'landing' | 'onboarding' | 'login' | 'marketplace' | 'baker-dashboard' | 'baker-profile' | 'admin-login' | 'admin-dashboard';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('landing');
-  const [userType, setUserType] = useState<'customer' | 'baker' | null>(null);
+  const [userType, setUserType] = useState<'customer' | 'baker' | 'admin' | null>(null);
 
   // Handle hash-based navigation for profile
   useEffect(() => {
@@ -35,6 +35,10 @@ export default function App() {
     setCurrentView('login');
   };
 
+  const handleNavigateToAdminLogin = () => {
+    setCurrentView('admin-login');
+  };
+
   const handleOnboardingComplete = () => {
     setCurrentView('login');
   };
@@ -48,11 +52,17 @@ export default function App() {
     }
   };
 
+  const handleAdminLoginSuccess = (token: string, user: any) => {
+    setUserType('admin');
+    setCurrentView('admin-dashboard');
+  };
+
   const handleLogout = () => {
     setUserType(null);
-    setCurrentView('login');
+    setCurrentView('landing');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('auth_token');
   };
 
   const handleViewCart = () => {
@@ -63,7 +73,7 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <div className="animate-fadeIn">
-        {currentView === 'landing' && <LandingView onNavigateToLogin={handleNavigateToLogin} />}
+        {currentView === 'landing' && <LandingView onNavigateToLogin={handleNavigateToLogin} onNavigateToAdmin={handleNavigateToAdminLogin} />}
       </div>
       <div className="animate-fadeIn">
         {currentView === 'onboarding' && <OnboardingView onComplete={handleOnboardingComplete} />}
@@ -79,6 +89,12 @@ export default function App() {
       </div>
       <div className="animate-fadeIn">
         {currentView === 'baker-profile' && <BakerProfile onLogout={handleLogout} />}
+      </div>
+      <div className="animate-fadeIn">
+        {currentView === 'admin-login' && <AdminLogin onLoginSuccess={handleAdminLoginSuccess} />}
+      </div>
+      <div className="animate-fadeIn">
+        {currentView === 'admin-dashboard' && <AdminDashboard onLogout={handleLogout} />}
       </div>
     </div>
   );

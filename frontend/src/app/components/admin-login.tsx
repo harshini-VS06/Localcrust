@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield, Lock, Mail } from "lucide-react";
+import { Shield, Lock, User } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { apiCall } from "@/api/config";
@@ -9,7 +9,7 @@ interface AdminLoginProps {
 }
 
 export function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -22,17 +22,17 @@ export function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
     try {
       const response = await apiCall<{
         token: string;
-        user: any;
+        admin: any;
         message: string;
       }>("/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       });
 
       localStorage.setItem("auth_token", response.token);
-      localStorage.setItem("user", JSON.stringify(response.user));
-      onLoginSuccess(response.token, response.user);
+      localStorage.setItem("user", JSON.stringify(response.admin));
+      onLoginSuccess(response.token, response.admin);
     } catch (err: any) {
       setError(err.message || "Invalid credentials");
     } finally {
@@ -63,15 +63,15 @@ export function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-[#4E342E] mb-2">
-                Admin Email
+                Admin Username
               </label>
               <div className="relative">
-                <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-[#4E342E]/40" />
+                <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-[#4E342E]/40" />
                 <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@localcrust.com"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="admin"
                   required
                   className="w-full pl-12 pr-4 py-3 border-2 border-[#D35400]/20 rounded-xl focus:border-[#D35400] outline-none"
                 />

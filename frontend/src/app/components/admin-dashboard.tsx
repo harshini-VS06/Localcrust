@@ -73,7 +73,35 @@ interface SalesReport {
   }>;
 }
 
-type AdminView = 'dashboard' | 'bakers' | 'orders' | 'users' | 'reviews' | 'reports';
+type AdminView = 'dashboard' | 'users' | 'bakers' | 'orders' | 'payments' | 'reviews' | 'reports';
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  user_type: string;
+  is_blocked: boolean;
+  total_orders: number;
+  created_at: string;
+}
+
+interface Payment {
+  id: string;
+  order_id: number;
+  order_number: string;
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  method: string;
+  email: string;
+  contact: string;
+  error_code?: string;
+  error_description?: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [activeView, setActiveView] = useState<AdminView>('dashboard');
@@ -83,6 +111,8 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [salesReport, setSalesReport] = useState<SalesReport | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBaker, setSelectedBaker] = useState<Baker | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -99,10 +129,14 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     try {
       if (activeView === 'dashboard') {
         await loadStats();
+      } else if (activeView === 'users') {
+        await loadUsers();
       } else if (activeView === 'bakers') {
         await Promise.all([loadPendingBakers(), loadAllBakers()]);
       } else if (activeView === 'orders') {
         await loadOrders();
+      } else if (activeView === 'payments') {
+        await loadPayments();
       } else if (activeView === 'reviews') {
         await loadReviews();
       } else if (activeView === 'reports') {
@@ -157,6 +191,20 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     setSalesReport(data);
   };
 
+  const loadUsers = async () => {
+    const data = await apiCall<{ users: User[] }>('/admin/users', {
+      headers: getAuthHeaders(),
+    });
+    setUsers(data.users);
+  };
+
+  const loadPayments = async () => {
+    const data = await apiCall<{ payments: Payment[] }>('/admin/payments', {
+      headers: getAuthHeaders(),
+    });
+    setPayments(data.payments);
+  };
+
   const handleVerifyBaker = async (bakerId: string) => {
     if (!confirm('Are you sure you want to approve this baker?')) return;
 
@@ -190,6 +238,71 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       await loadStats();
     } catch (error: any) {
       alert(error.message || 'Failed to reject baker');
+    }
+  };
+
+  const handleBlockUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to block this user?')) return;
+    
+    try {
+      await apiCall(`/admin/users/${userId}/block`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+      });
+      alert('User blocked successfully!');
+      await loadUsers();
+      await loadStats();
+    } catch (error: any) {
+      alert(error.message || 'Failed to block user');
+    }
+  };
+
+  const handleUnblockUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to unblock this user?')) return;
+    
+    try {
+      await apiCall(`/admin/users/${userId}/unblock`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+      });
+      alert('User unblocked successfully!');
+      await loadUsers();
+      await loadStats();
+    } catch (error: any) {
+      alert(error.message || 'Failed to unblock user');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user? This action cannot be undone!')) return;
+    
+    try {
+      await apiCall(`/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      alert('User deleted successfully!');
+      await loadUsers();
+      await loadStats();
+    } catch (error: any) {
+      alert(error.message || 'Failed to delete user');
+    }
+  };
+
+  const handleDeleteBaker = async (bakerId: string) => {
+    if (!confirm('Are you sure you want to delete this baker? This will also delete all their products!')) return;
+    
+    try {
+      await apiCall(`/admin/bakers/${bakerId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      alert('Baker deleted successfully!');
+      await loadAllBakers();
+      await loadPendingBakers();
+      await loadStats();
+    } catch (error: any) {
+      alert(error.message || 'Failed to delete baker');
     }
   };
 
@@ -253,8 +366,10 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           <div className="flex gap-4 overflow-x-auto">
             {[
               { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+              { key: 'users', label: 'Users', icon: Users },
               { key: 'bakers', label: 'Bakers', icon: Store },
               { key: 'orders', label: 'Orders', icon: ShoppingBag },
+              { key: 'payments', label: 'Payments', icon: DollarSign },
               { key: 'reviews', label: 'Reviews', icon: Eye },
               { key: 'reports', label: 'Reports', icon: TrendingUp },
             ].map((item) => (
@@ -382,6 +497,87 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                     </div>
                   </CardContent>
                 </Card>
+              </div>
+            )}
+
+            {/* Users View */}
+            {activeView === 'users' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-[#4E342E]">User Management</h2>
+                  <span className="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg font-medium">
+                    {users.length} Total Users
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  {users.map((user) => (
+                    <Card key={user.id} className={`bg-white border-2 ${
+                      user.is_blocked ? 'border-red-200 bg-red-50' : 'border-blue-200'
+                    }`}>
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-3">
+                              <h4 className="text-lg font-bold text-[#4E342E]">{user.name}</h4>
+                              {user.is_blocked && (
+                                <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+                                  BLOCKED
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <p className="text-[#4E342E]/60">Email</p>
+                                <p className="text-[#4E342E] font-medium">{user.email}</p>
+                              </div>
+                              <div>
+                                <p className="text-[#4E342E]/60">Total Orders</p>
+                                <p className="text-[#4E342E] font-medium">{user.total_orders}</p>
+                              </div>
+                              <div>
+                                <p className="text-[#4E342E]/60">User Type</p>
+                                <p className="text-[#4E342E] font-medium capitalize">{user.user_type}</p>
+                              </div>
+                              <div>
+                                <p className="text-[#4E342E]/60">Joined</p>
+                                <p className="text-[#4E342E] font-medium">
+                                  {new Date(user.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-3 mt-4">
+                          {user.is_blocked ? (
+                            <Button
+                              onClick={() => handleUnblockUser(user.id)}
+                              className="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-xl"
+                            >
+                              <CheckCircle className="w-5 h-5 mr-2" />
+                              Unblock User
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={() => handleBlockUser(user.id)}
+                              className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl"
+                            >
+                              <XCircle className="w-5 h-5 mr-2" />
+                              Block User
+                            </Button>
+                          )}
+                          <Button
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl"
+                          >
+                            <XCircle className="w-5 h-5 mr-2" />
+                            Delete User
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -607,6 +803,94 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                         </CardContent>
                       </Card>
                     ))}
+                </div>
+              </div>
+            )}
+
+            {/* Payments View */}
+            {activeView === 'payments' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-[#4E342E]">Payment Transactions</h2>
+                  <span className="px-4 py-2 bg-purple-100 text-purple-800 rounded-lg font-medium">
+                    {payments.length} Transactions
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {payments.length === 0 ? (
+                    <Card className="bg-white border-2 border-[#D35400]/10">
+                      <CardContent className="p-12 text-center">
+                        <DollarSign className="w-16 h-16 text-[#4E342E]/20 mx-auto mb-4" />
+                        <p className="text-lg text-[#4E342E]/60">No payment transactions yet</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    payments.map((payment) => (
+                      <Card key={payment.id} className="bg-white border-2 border-[#D35400]/10">
+                        <CardContent className="p-6">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex-1">
+                              <h4 className="text-lg font-bold text-[#4E342E]">
+                                Order #{payment.order_number}
+                              </h4>
+                              <p className="text-sm text-[#4E342E]/60">
+                                Razorpay Order ID: {payment.razorpay_order_id}
+                              </p>
+                              <p className="text-sm text-[#4E342E]/60">
+                                Payment ID: {payment.razorpay_payment_id}
+                              </p>
+                              <p className="text-xs text-[#4E342E]/40 mt-2">
+                                {new Date(payment.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-2xl font-bold text-[#D35400]">
+                                ₹{Math.round(payment.amount)}
+                              </p>
+                              <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium mt-2 ${
+                                payment.status === 'captured' ? 'bg-green-100 text-green-800' :
+                                payment.status === 'failed' ? 'bg-red-100 text-red-800' :
+                                payment.status === 'authorized' ? 'bg-blue-100 text-blue-800' :
+                                'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {payment.status.toUpperCase()}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-[#FFF9F5] rounded-lg p-4">
+                            <div>
+                              <p className="text-xs text-[#4E342E]/60">Method</p>
+                              <p className="text-sm text-[#4E342E] font-medium">{payment.method}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-[#4E342E]/60">Currency</p>
+                              <p className="text-sm text-[#4E342E] font-medium">{payment.currency}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-[#4E342E]/60">Email</p>
+                              <p className="text-sm text-[#4E342E] font-medium truncate">{payment.email}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-[#4E342E]/60">Contact</p>
+                              <p className="text-sm text-[#4E342E] font-medium">{payment.contact}</p>
+                            </div>
+                          </div>
+
+                          {payment.error_description && (
+                            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                              <p className="text-sm font-semibold text-red-800 mb-1">Error:</p>
+                              <p className="text-sm text-red-600">{payment.error_description}</p>
+                              {payment.error_code && (
+                                <p className="text-xs text-red-500 mt-1">Code: {payment.error_code}</p>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
                 </div>
               </div>
             )}

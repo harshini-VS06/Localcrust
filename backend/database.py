@@ -15,6 +15,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(200), nullable=False)
     user_type = db.Column(db.String(20), nullable=False)  # 'customer' or 'baker'
     saved_address = db.Column(db.Text)  # JSON stored address for customers
+    is_blocked = db.Column(db.Boolean, default=False)  # Admin can block users
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -154,3 +155,24 @@ class Admin(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
+
+class Payment(db.Model):
+    """Razorpay payment transactions"""
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    razorpay_order_id = db.Column(db.String(100), unique=True, nullable=False)
+    razorpay_payment_id = db.Column(db.String(100), unique=True)
+    razorpay_signature = db.Column(db.String(200))
+    amount = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(10), default='INR')
+    status = db.Column(db.String(50), default='created')  # created, authorized, captured, failed, refunded
+    method = db.Column(db.String(50))  # card, netbanking, upi, wallet
+    email = db.Column(db.String(120))
+    contact = db.Column(db.String(20))
+    error_code = db.Column(db.String(50))
+    error_description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    order = db.relationship('Order', backref='payment_transactions')
