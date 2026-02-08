@@ -33,7 +33,6 @@ def test_route():
 def get_baker_reviews():
     """Get all reviews for the baker's products"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -44,7 +43,6 @@ def get_baker_reviews():
         if not payload or payload.get('user_type') != 'baker':
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get baker profile
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -53,7 +51,6 @@ def get_baker_reviews():
         if not baker:
             return jsonify({'error': 'Baker profile not found'}), 404
         
-        # Get all reviews for baker's products using GSI
         response = reviews_table.query(
             IndexName='baker_id-index',
             KeyConditionExpression='baker_id = :bid',
@@ -61,10 +58,8 @@ def get_baker_reviews():
         )
         reviews = response.get('Items', [])
         
-        # Sort by created_at descending
         reviews.sort(key=lambda x: x['created_at'], reverse=True)
         
-        # Build response
         result = []
         for review in reviews:
             user_info = User.get_by_id(review['user_id'])
@@ -98,7 +93,6 @@ def get_baker_reviews():
 def get_review_stats():
     """Get review statistics for the baker"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -109,7 +103,6 @@ def get_review_stats():
         if not payload or payload.get('user_type') != 'baker':
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get baker profile
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -118,7 +111,6 @@ def get_review_stats():
         if not baker:
             return jsonify({'error': 'Baker profile not found'}), 404
         
-        # Get all reviews for baker using GSI
         response = reviews_table.query(
             IndexName='baker_id-index',
             KeyConditionExpression='baker_id = :bid',
@@ -134,13 +126,11 @@ def get_review_stats():
                 'rating_distribution': {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
             }), 200
         
-        # Calculate stats
         total_reviews = len(reviews)
         total_rating = sum(r['rating'] for r in reviews)
         average_rating = round(total_rating / total_reviews, 1)
         pending_replies = len([r for r in reviews if not r.get('baker_reply')])
         
-        # Rating distribution
         rating_distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
         for review in reviews:
             rating_distribution[review['rating']] = rating_distribution.get(review['rating'], 0) + 1
@@ -162,7 +152,6 @@ def get_review_stats():
 def reply_to_review(review_id):
     """Baker replies to a review"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -173,7 +162,6 @@ def reply_to_review(review_id):
         if not payload or payload.get('user_type') != 'baker':
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get baker profile
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -182,32 +170,28 @@ def reply_to_review(review_id):
         if not baker:
             return jsonify({'error': 'Baker profile not found'}), 404
         
-        # Get review
         response = reviews_table.get_item(Key={'id': str(review_id)})
         review = response.get('Item')
         
         if not review:
             return jsonify({'error': 'Review not found'}), 404
         
-        # Verify review belongs to baker's product
         if review['baker_id'] != baker['id']:
             return jsonify({'error': 'Unauthorized'}), 403
         
-        # Get reply from request
         data = request.get_json()
         reply_text = data.get('reply', '').strip()
         
         if not reply_text:
             return jsonify({'error': 'Reply text is required'}), 400
         
-        # Update review with reply
         Review.update(
             str(review_id),
             baker_reply=reply_text,
             reply_at=datetime.utcnow().isoformat()
         )
         
-        # Create notification for customer
+       
         product = Product.get_by_id(review['product_id'])
         notification_id = generate_id()
         Notification.create(
@@ -219,7 +203,7 @@ def reply_to_review(review_id):
             related_review_id=str(review_id)
         )
         
-        # Get updated review
+        
         response = reviews_table.get_item(Key={'id': str(review_id)})
         updated_review = response.get('Item')
         

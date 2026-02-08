@@ -8,23 +8,20 @@ import os
 import json
 from decimal import Decimal
 
-# Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 
-# Table names - can be configured via environment variables
-USERS_TABLE = os.getenv('USERS_TABLE', 'LocalCrust-Users')
-BAKERS_TABLE = os.getenv('BAKERS_TABLE', 'LocalCrust-Bakers')
-PRODUCTS_TABLE = os.getenv('PRODUCTS_TABLE', 'LocalCrust-Products')
-ORDERS_TABLE = os.getenv('ORDERS_TABLE', 'LocalCrust-Orders')
-ORDER_ITEMS_TABLE = os.getenv('ORDER_ITEMS_TABLE', 'LocalCrust-OrderItems')
-REVIEWS_TABLE = os.getenv('REVIEWS_TABLE', 'LocalCrust-Reviews')
-WISHLIST_TABLE = os.getenv('WISHLIST_TABLE', 'LocalCrust-Wishlist')
-LOYALTY_POINTS_TABLE = os.getenv('LOYALTY_POINTS_TABLE', 'LocalCrust-LoyaltyPoints')
-BADGES_TABLE = os.getenv('BADGES_TABLE', 'LocalCrust-Badges')
-NOTIFICATIONS_TABLE = os.getenv('NOTIFICATIONS_TABLE', 'LocalCrust-Notifications')
-ADMINS_TABLE = os.getenv('ADMINS_TABLE', 'LocalCrust-Admins')
+USERS_TABLE = os.getenv('USERS_TABLE', 'Users')
+BAKERS_TABLE = os.getenv('BAKERS_TABLE', 'Bakers')
+PRODUCTS_TABLE = os.getenv('PRODUCTS_TABLE', 'Products')
+ORDERS_TABLE = os.getenv('ORDERS_TABLE', 'Orders')
+ORDER_ITEMS_TABLE = os.getenv('ORDER_ITEMS_TABLE', 'OrderItems')
+REVIEWS_TABLE = os.getenv('REVIEWS_TABLE', 'Reviews')
+WISHLIST_TABLE = os.getenv('WISHLIST_TABLE', 'Wishlist')
+LOYALTY_POINTS_TABLE = os.getenv('LOYALTY_POINTS_TABLE', 'LoyaltyPoints')
+BADGES_TABLE = os.getenv('BADGES_TABLE', 'Badges')
+NOTIFICATIONS_TABLE = os.getenv('NOTIFICATIONS_TABLE', 'Notifications')
+ADMINS_TABLE = os.getenv('ADMINS_TABLE', 'Admins')
 
-# Get table references
 users_table = dynamodb.Table(USERS_TABLE)
 bakers_table = dynamodb.Table(BAKERS_TABLE)
 products_table = dynamodb.Table(PRODUCTS_TABLE)
@@ -37,7 +34,6 @@ badges_table = dynamodb.Table(BADGES_TABLE)
 notifications_table = dynamodb.Table(NOTIFICATIONS_TABLE)
 admins_table = dynamodb.Table(ADMINS_TABLE)
 
-# Helper function to convert floats to Decimals for DynamoDB
 def float_to_decimal(obj):
     """Convert float values to Decimal for DynamoDB"""
     if isinstance(obj, float):
@@ -48,7 +44,6 @@ def float_to_decimal(obj):
         return [float_to_decimal(item) for item in obj]
     return obj
 
-# Helper function to convert Decimals to floats for JSON serialization
 def decimal_to_float(obj):
     """Convert Decimal values to float for JSON serialization"""
     if isinstance(obj, Decimal):
@@ -67,13 +62,12 @@ class DynamoDBModel:
         """Get current timestamp in ISO format"""
         return datetime.utcnow().isoformat()
 
-# User Model
 class User(DynamoDBModel):
     @staticmethod
     def create(user_id, name, email, password_hash, user_type, saved_address=None):
         """Create a new user"""
         item = {
-            'id': str(user_id),
+            'user_id': str(user_id),
             'name': name,
             'email': email,
             'password_hash': password_hash,
@@ -87,7 +81,7 @@ class User(DynamoDBModel):
     @staticmethod
     def get_by_id(user_id):
         """Get user by ID"""
-        response = users_table.get_item(Key={'id': str(user_id)})
+        response = users_table.get_item(Key={'user_id': str(user_id)})
         return response.get('Item')
     
     @staticmethod
@@ -107,20 +101,19 @@ class User(DynamoDBModel):
         expression_attribute_values = {f":{k}": v for k, v in kwargs.items()}
         
         users_table.update_item(
-            Key={'id': str(user_id)},
+            Key={'user_id': str(user_id)},
             UpdateExpression=update_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# Baker Model
 class Baker(DynamoDBModel):
     @staticmethod
     def create(baker_id, user_id, shop_name, owner_name, phone, business_license, tax_id,
                shop_address, city, state, zip_code, shop_description, license_document='', verified=False):
         """Create a new baker profile"""
         item = {
-            'id': str(baker_id),
+            'baker_id': str(baker_id),
             'user_id': str(user_id),
             'shop_name': shop_name,
             'owner_name': owner_name,
@@ -142,7 +135,7 @@ class Baker(DynamoDBModel):
     @staticmethod
     def get_by_id(baker_id):
         """Get baker by ID"""
-        response = bakers_table.get_item(Key={'id': str(baker_id)})
+        response = bakers_table.get_item(Key={'baker_id': str(baker_id)})
         return response.get('Item')
     
     @staticmethod
@@ -171,19 +164,18 @@ class Baker(DynamoDBModel):
         expression_attribute_values = {f":{k}": v for k, v in kwargs.items()}
         
         bakers_table.update_item(
-            Key={'id': str(baker_id)},
+            Key={'baker_id': str(baker_id)},
             UpdateExpression=update_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# Product Model
 class Product(DynamoDBModel):
     @staticmethod
     def create(product_id, baker_id, name, category, price, description='', image_url='', in_stock=True):
         """Create a new product"""
         item = float_to_decimal({
-            'id': str(product_id),
+            'product_id': str(product_id),
             'baker_id': str(baker_id),
             'name': name,
             'category': category,
@@ -199,7 +191,7 @@ class Product(DynamoDBModel):
     @staticmethod
     def get_by_id(product_id):
         """Get product by ID"""
-        response = products_table.get_item(Key={'id': str(product_id)})
+        response = products_table.get_item(Key={'product_id': str(product_id)})
         item = response.get('Item')
         return decimal_to_float(item) if item else None
     
@@ -229,7 +221,7 @@ class Product(DynamoDBModel):
         expression_attribute_values = {f":{k}": v for k, v in kwargs.items()}
         
         products_table.update_item(
-            Key={'id': str(product_id)},
+            Key={'product_id': str(product_id)},
             UpdateExpression=update_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=expression_attribute_values
@@ -238,17 +230,16 @@ class Product(DynamoDBModel):
     @staticmethod
     def delete(product_id):
         """Delete a product"""
-        products_table.delete_item(Key={'id': str(product_id)})
+        products_table.delete_item(Key={'product_id': str(product_id)})
 
-# Order Model
 class Order(DynamoDBModel):
+
     @staticmethod
-    def create(order_db_id, order_id, user_id, total_amount, delivery_address, 
+    def create(order_id, user_id, total_amount, delivery_address,
                status='pending', payment_status='pending', payment_id=''):
         """Create a new order"""
         item = float_to_decimal({
-            'id': str(order_db_id),
-            'order_id': order_id,
+            'order_id': str(order_id),          # ✅ DynamoDB PK
             'user_id': str(user_id),
             'total_amount': total_amount,
             'status': status,
@@ -258,50 +249,52 @@ class Order(DynamoDBModel):
             'created_at': Order.get_timestamp(),
             'updated_at': Order.get_timestamp()
         })
+
         orders_table.put_item(Item=item)
         return decimal_to_float(item)
-    
+
     @staticmethod
-    def get_by_id(order_db_id):
-        """Get order by database ID"""
-        response = orders_table.get_item(Key={'id': str(order_db_id)})
+    def get_by_id(order_id):
+        """Get order by order_id"""
+        response = orders_table.get_item(
+            Key={'order_id': str(order_id)}
+        )
         item = response.get('Item')
         return decimal_to_float(item) if item else None
-    
+
     @staticmethod
     def get_by_user_id(user_id):
-        """Get all orders by user ID"""
+        """Get all orders for a user (via GSI)"""
         response = orders_table.query(
             IndexName='user_id-index',
             KeyConditionExpression=Key('user_id').eq(str(user_id))
         )
         return decimal_to_float(response.get('Items', []))
-    
+
     @staticmethod
-    def update(order_db_id, **kwargs):
+    def update(order_id, **kwargs):
         """Update order attributes"""
         kwargs = float_to_decimal(kwargs)
         kwargs['updated_at'] = Order.get_timestamp()
-        
-        update_expression = "SET " + ", ".join([f"#{k} = :{k}" for k in kwargs.keys()])
-        expression_attribute_names = {f"#{k}": k for k in kwargs.keys()}
+
+        update_expression = "SET " + ", ".join([f"#{k} = :{k}" for k in kwargs])
+        expression_attribute_names = {f"#{k}": k for k in kwargs}
         expression_attribute_values = {f":{k}": v for k, v in kwargs.items()}
-        
+
         orders_table.update_item(
-            Key={'id': str(order_db_id)},
+            Key={'order_id': str(order_id)},
             UpdateExpression=update_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# OrderItem Model
 class OrderItem(DynamoDBModel):
+
     @staticmethod
-    def create(item_id, order_db_id, product_id, product_name, baker_name, quantity, price):
-        """Create a new order item"""
+    def create(item_id, order_id, product_id, product_name, baker_name, quantity, price):
         item = float_to_decimal({
-            'id': str(item_id),
-            'order_id': str(order_db_id),
+            'item_id': str(item_id),
+            'order_id': str(order_id),
             'product_id': str(product_id),
             'product_name': product_name,
             'baker_name': baker_name,
@@ -310,23 +303,21 @@ class OrderItem(DynamoDBModel):
         })
         order_items_table.put_item(Item=item)
         return decimal_to_float(item)
-    
+
     @staticmethod
-    def get_by_order_id(order_db_id):
-        """Get all items for an order"""
+    def get_by_order_id(order_id):
         response = order_items_table.query(
             IndexName='order_id-index',
-            KeyConditionExpression=Key('order_id').eq(str(order_db_id))
+            KeyConditionExpression=Key('order_id').eq(str(order_id))
         )
         return decimal_to_float(response.get('Items', []))
 
-# Review Model
 class Review(DynamoDBModel):
     @staticmethod
     def create(review_id, user_id, product_id, baker_id, rating, comment, baker_reply='', reply_at=''):
         """Create a new review"""
         item = {
-            'id': str(review_id),
+            'review_id': str(review_id),
             'user_id': str(user_id),
             'product_id': str(product_id),
             'baker_id': str(baker_id),
@@ -365,57 +356,57 @@ class Review(DynamoDBModel):
         expression_attribute_values = {f":{k}": v for k, v in kwargs.items()}
         
         reviews_table.update_item(
-            Key={'id': str(review_id)},
+            Key={'review_id': str(review_id)},
             UpdateExpression=update_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# Wishlist Model
 class Wishlist(DynamoDBModel):
+
     @staticmethod
-    def create(wishlist_id, user_id, product_id):
-        """Create a new wishlist item"""
+    def create(user_id, product_id):
         item = {
-            'id': str(wishlist_id),
             'user_id': str(user_id),
             'product_id': str(product_id),
             'created_at': Wishlist.get_timestamp()
         }
         wishlist_table.put_item(Item=item)
         return item
-    
+
     @staticmethod
     def get_by_user_id(user_id):
-        """Get all wishlist items for a user"""
         response = wishlist_table.query(
-            IndexName='user_id-index',
             KeyConditionExpression=Key('user_id').eq(str(user_id))
         )
         return response.get('Items', [])
-    
+
     @staticmethod
     def get_by_user_and_product(user_id, product_id):
-        """Check if product is in user's wishlist"""
-        response = wishlist_table.scan(
-            FilterExpression=Attr('user_id').eq(str(user_id)) & Attr('product_id').eq(str(product_id))
+        response = wishlist_table.get_item(
+            Key={
+                'user_id': str(user_id),
+                'product_id': str(product_id)
+            }
         )
-        items = response.get('Items', [])
-        return items[0] if items else None
-    
-    @staticmethod
-    def delete(wishlist_id):
-        """Delete a wishlist item"""
-        wishlist_table.delete_item(Key={'id': str(wishlist_id)})
+        return response.get('Item')
 
-# Notification Model
+    @staticmethod
+    def delete(user_id, product_id):
+        wishlist_table.delete_item(
+            Key={
+                'user_id': str(user_id),
+                'product_id': str(product_id)
+            }
+        )
+
 class Notification(DynamoDBModel):
     @staticmethod
     def create(notification_id, user_id, title, message, notification_type='info', 
                read=False, related_review_id=''):
         """Create a new notification"""
         item = {
-            'id': str(notification_id),
+            'notification_id': str(notification_id),
             'user_id': str(user_id),
             'title': title,
             'message': message,
@@ -434,7 +425,7 @@ class Notification(DynamoDBModel):
             IndexName='user_id-index',
             KeyConditionExpression=Key('user_id').eq(str(user_id)),
             Limit=limit,
-            ScanIndexForward=False  # Sort by created_at descending
+            ScanIndexForward=False  
         )
         return response.get('Items', [])
     
@@ -446,19 +437,18 @@ class Notification(DynamoDBModel):
         expression_attribute_values = {f":{k}": v for k, v in kwargs.items()}
         
         notifications_table.update_item(
-            Key={'id': str(notification_id)},
+            Key={'notification_id': str(notification_id)},
             UpdateExpression=update_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# Admin Model
 class Admin(DynamoDBModel):
     @staticmethod
     def create(admin_id, username, email, password_hash, full_name, role='admin', is_active=True):
         """Create a new admin"""
         item = {
-            'id': str(admin_id),
+            'admin_id': str(admin_id),
             'username': username,
             'email': email,
             'password_hash': password_hash,
@@ -488,13 +478,12 @@ class Admin(DynamoDBModel):
         expression_attribute_values = {f":{k}": v for k, v in kwargs.items()}
         
         admins_table.update_item(
-            Key={'id': str(admin_id)},
+            Key={'admin_id': str(admin_id)},
             UpdateExpression=update_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=expression_attribute_values
         )
 
-# Helper function to generate unique IDs
 def generate_id():
     """Generate a unique ID using timestamp and random component"""
     import time

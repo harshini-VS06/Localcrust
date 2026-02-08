@@ -9,7 +9,6 @@ import json
 from dotenv import load_dotenv
 from email_service import send_otp_email, send_order_confirmation
 
-# Import SNS service for real-time notifications
 try:
     from sns_service import (
         send_order_confirmation as sns_send_order_confirmation,
@@ -25,13 +24,11 @@ except Exception as e:
     print(f"Warning: SNS service not available: {e}")
     SNS_ENABLED = False
 
-# Import DynamoDB database and models
 from dynamodb_database import (
     User, Baker, Product, Order, OrderItem, Review, Wishlist, 
     Notification, Admin, generate_id
 )
 
-# Try to import AI service, but continue if it fails
 try:
     from ai_service import get_recipe_suggestions, get_product_recommendations
     AI_SERVICE_AVAILABLE = True
@@ -45,17 +42,16 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# AWS Production CORS Configuration
-allowed_origins = os.getenv('CORS_ORIGINS', 'https://yourdomain.com').split(',')
-CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
+allowed_origins = os.getenv('CORS_ORIGINS', '*')
+if allowed_origins == '*':
+    CORS(app, resources={r"/*": {"origins": "*"}})
+else:
+    CORS(app, resources={r"/*": {"origins": allowed_origins.split(',')}})
 
-# Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'CHANGE-THIS-IN-PRODUCTION')
 
-# Store OTPs temporarily (in production, use Redis or ElastiCache)
 otp_storage = {}
 
-# Helper Functions
 def generate_otp():
     """Generate a 6-digit OTP"""
     return str(random.randint(100000, 999999))
@@ -85,30 +81,25 @@ def verify_token(token):
     except jwt.InvalidTokenError:
         return None
 
-# Routes
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     return jsonify({'status': 'healthy', 'message': 'Local Crust API is running on AWS with DynamoDB'}), 200
 
-# Authentication Routes
 @app.route('/api/auth/register', methods=['POST'])
 def register():
     """Register a new user (customer)"""
     try:
         data = request.get_json()
         
-        # Validate required fields
         required_fields = ['name', 'email', 'password', 'user_type']
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Check if user already exists
         if User.get_by_email(data['email']):
             return jsonify({'error': 'Email already registered'}), 400
         
-        # Create new user
         user_id = generate_id()
         user = User.create(
             user_id=user_id,
@@ -118,10 +109,8 @@ def register():
             user_type=data['user_type']
         )
         
-        # Generate token
         token = create_token(user['id'], user['user_type'])
         
-        # Subscribe user to SNS notifications
         if SNS_ENABLED:
             try:
                 subscribe_email_to_notifications(user['email'])
@@ -149,28 +138,23 @@ def login():
     try:
         data = request.get_json()
         
-        # Validate required fields
         if 'email' not in data or 'password' not in data:
             return jsonify({'error': 'Email and password are required'}), 400
         
-        # Find user
         user = User.get_by_email(data['email'])
         
         if not user or not check_password_hash(user['password_hash'], data['password']):
             return jsonify({'error': 'Invalid email or password'}), 401
         
-        # Generate token
         token = create_token(user['id'], user['user_type'])
         
-        # Prepare response based on user type
         user_data = {
             'id': user['id'],
             'name': user['name'],
             'email': user['email'],
             'user_type': user['user_type']
         }
-        
-        # If baker, include baker profile
+    
         if user['user_type'] == 'baker':
             baker_profile = Baker.get_by_user_id(user['id'])
             if baker_profile:
@@ -199,30 +183,25 @@ def send_otp():
         
         email = data['email']
         
-        # Check if user exists
         user = User.get_by_email(email)
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
-        # Generate OTP
         otp = generate_otp()
         
-        # Store OTP with expiration (5 minutes)
         otp_storage[email] = {
             'otp': otp,
             'expires_at': datetime.utcnow() + timedelta(minutes=5)
         }
         
-        # Send OTP via email
         email_sent = send_otp_email(email, otp)
         
-        # For development: also print to console
         print(f"OTP for {email}: {otp}")
         
         return jsonify({
             'message': 'OTP sent successfully' if email_sent else 'OTP generated (email not configured)',
             'email': email,
-            'otp': otp if not email_sent else None  # Only return OTP if email failed
+            'otp': otp if not email_sent else None  
         }), 200
         
     except Exception as e:
@@ -240,30 +219,24 @@ def verify_otp():
         email = data['email']
         otp = data['otp']
         
-        # Check if OTP exists
         if email not in otp_storage:
             return jsonify({'error': 'OTP not found or expired'}), 400
         
         stored_otp_data = otp_storage[email]
         
-        # Check if OTP is expired
         if datetime.utcnow() > stored_otp_data['expires_at']:
             del otp_storage[email]
             return jsonify({'error': 'OTP expired'}), 400
         
-        # Verify OTP
         if stored_otp_data['otp'] != otp:
             return jsonify({'error': 'Invalid OTP'}), 401
         
-        # Remove used OTP
         del otp_storage[email]
         
-        # Find user
         user = User.get_by_email(email)
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
-        # Generate token
         token = create_token(user['id'], user['user_type'])
         
         return jsonify({
@@ -280,14 +253,12 @@ def verify_otp():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Baker Registration Routes
 @app.route('/api/baker/register', methods=['POST'])
 def register_baker():
     """Complete baker registration with all details"""
     try:
         data = request.get_json()
         
-        # Validate required fields
         required_fields = [
             'shop_name', 'owner_name', 'email', 'phone', 'password',
             'business_license', 'tax_id', 'shop_address', 'city', 'state', 'zip_code',
@@ -298,11 +269,9 @@ def register_baker():
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Check if user already exists
         if User.get_by_email(data['email']):
             return jsonify({'error': 'Email already registered'}), 400
         
-        # Create user account
         user_id = generate_id()
         user = User.create(
             user_id=user_id,
@@ -312,7 +281,6 @@ def register_baker():
             user_type='baker'
         )
         
-        # Create baker profile
         baker_id = generate_id()
         baker = Baker.create(
             baker_id=baker_id,
@@ -328,10 +296,9 @@ def register_baker():
             zip_code=data['zip_code'],
             license_document=data.get('license_document', ''),
             shop_description=data['shop_description'],
-            verified=False  # Requires admin verification
+            verified=False  
         )
         
-        # Add products
         for product_data in data['products']:
             product_id = generate_id()
             Product.create(
@@ -344,7 +311,6 @@ def register_baker():
                 in_stock=True
             )
         
-        # Generate token
         token = create_token(user['id'], user['user_type'])
         
         return jsonify({
@@ -375,7 +341,6 @@ def get_baker_profile(baker_id):
         if not baker:
             return jsonify({'error': 'Baker not found'}), 404
         
-        # Get products
         products = Product.get_by_baker_id(baker['id'])
         
         return jsonify({
@@ -424,7 +389,6 @@ def get_all_bakers():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Product Routes
 @app.route('/api/products', methods=['GET'])
 def get_all_products():
     """Get all products from verified bakers"""
@@ -433,10 +397,8 @@ def get_all_products():
         verified_bakers = Baker.get_all_verified()
         verified_baker_ids = [b['id'] for b in verified_bakers]
         
-        # Filter products from verified bakers only
         products = [p for p in all_products if p['baker_id'] in verified_baker_ids]
         
-        # Enrich with baker info
         result = []
         for p in products:
             baker = Baker.get_by_id(p['baker_id'])
@@ -465,7 +427,6 @@ def get_all_products():
 def add_product():
     """Add a new product (requires authentication)"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -476,7 +437,6 @@ def add_product():
         if not payload or payload['user_type'] != 'baker':
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get baker profile
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -487,13 +447,11 @@ def add_product():
         
         data = request.get_json()
         
-        # Validate required fields
         required_fields = ['name', 'category', 'price']
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Create product
         product_id = generate_id()
         product = Product.create(
             product_id=product_id,
@@ -518,12 +476,10 @@ def add_product():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Order Routes
 @app.route('/api/orders', methods=['POST'])
 def create_order():
     """Create a new order"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -536,17 +492,14 @@ def create_order():
         
         data = request.get_json()
         
-        # Validate required fields
         required_fields = ['items', 'delivery_address', 'total_amount']
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Generate unique order ID
         order_id = generate_order_id()
         order_db_id = generate_id()
         
-        # Create order
         order = Order.create(
             order_db_id=order_db_id,
             order_id=order_id,
@@ -557,7 +510,6 @@ def create_order():
             delivery_address=json.dumps(data['delivery_address'])
         )
         
-        # Add order items
         items = []
         for item_data in data['items']:
             product = Product.get_by_id(str(item_data['product_id']))
@@ -578,7 +530,6 @@ def create_order():
             )
             items.append(order_item)
         
-        # Create Razorpay order
         razorpay_result = create_razorpay_order(
             amount=data['total_amount'],
             order_id=order['order_id'],
@@ -588,10 +539,8 @@ def create_order():
         if not razorpay_result['success']:
             print(f"Razorpay order creation failed: {razorpay_result.get('error')}")
         
-        # Get user info for notifications
         user = User.get_by_id(payload['user_id'])
         
-        # Send order confirmation via SNS
         if SNS_ENABLED and user:
             try:
                 items_for_notification = [{
@@ -611,10 +560,9 @@ def create_order():
             except Exception as e:
                 print(f"Warning: Failed to send SNS order confirmation: {e}")
         
-        # Notify bakers about new orders via SNS
+
         if SNS_ENABLED:
             try:
-                # Group items by baker
                 baker_orders = {}
                 for item in items:
                     product = Product.get_by_id(item['product_id'])
@@ -628,7 +576,6 @@ def create_order():
                             'price': item['price']
                         })
                 
-                # Send notification to each baker
                 for baker_id, baker_items in baker_orders.items():
                     baker = Baker.get_by_id(baker_id)
                     if baker:
@@ -647,7 +594,6 @@ def create_order():
             except Exception as e:
                 print(f"Warning: Failed to send SNS baker notifications: {e}")
         
-        # Return order details
         response_data = {
             'id': order['id'],
             'order_id': order['order_id'],
@@ -664,8 +610,7 @@ def create_order():
                 'price': item['price']
             } for item in items]
         }
-        
-        # Add Razorpay order ID if available
+    
         if razorpay_result['success']:
             response_data['razorpay_order_id'] = razorpay_result['razorpay_order_id']
         
@@ -674,11 +619,10 @@ def create_order():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/orders/<int:order_id>/payment', methods=['PUT'])
+@app.route('/api/orders/<order_id>/payment', methods=['PUT'])
 def update_payment_status(order_id):
     """Update payment status for an order"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -698,7 +642,6 @@ def update_payment_status(order_id):
         
         data = request.get_json()
         
-        # Update payment details
         update_data = {
             'payment_id': data.get('payment_id', ''),
             'payment_status': data.get('payment_status', 'completed')
@@ -709,10 +652,8 @@ def update_payment_status(order_id):
         
         Order.update(str(order_id), **update_data)
         
-        # Get updated order
         updated_order = Order.get_by_id(str(order_id))
-        
-        # Send payment confirmation via SNS
+       
         if SNS_ENABLED and update_data.get('payment_status') == 'completed':
             try:
                 user = User.get_by_id(payload['user_id'])
@@ -742,7 +683,6 @@ def update_payment_status(order_id):
 def get_user_orders():
     """Get all orders for the logged-in user"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -755,12 +695,10 @@ def get_user_orders():
         
         orders = Order.get_by_user_id(payload['user_id'])
         
-        # Sort by created_at descending
         orders.sort(key=lambda x: x['created_at'], reverse=True)
         
         result_orders = []
         for order in orders:
-            # Get order items
             items = OrderItem.get_by_order_id(order['id'])
             
             result_orders.append({
@@ -793,7 +731,6 @@ def get_user_orders():
 def get_order_by_id(order_id):
     """Get order details by ID"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -811,7 +748,6 @@ def get_order_by_id(order_id):
         if order['user_id'] != payload['user_id']:
             return jsonify({'error': 'Unauthorized'}), 403
         
-        # Get order items
         items = OrderItem.get_by_order_id(order['id'])
         
         print(f"Fetching order {order_id} for user {payload['user_id']}")
@@ -839,12 +775,10 @@ def get_order_by_id(order_id):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-# Baker Dashboard Routes
 @app.route('/api/baker/dashboard/stats', methods=['GET'])
 def get_baker_dashboard_stats():
     """Get dashboard statistics for baker"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -855,7 +789,6 @@ def get_baker_dashboard_stats():
         if not payload or payload['user_type'] != 'baker':
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get baker profile
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -864,12 +797,9 @@ def get_baker_dashboard_stats():
         if not baker:
             return jsonify({'error': 'Baker profile not found'}), 404
         
-        # Get products
         products = Product.get_by_baker_id(baker['id'])
         product_ids = [p['id'] for p in products]
         
-        # Get all order items for baker's products
-        # Note: In DynamoDB, we'd need to scan order_items - consider using GSI
         from dynamodb_database import order_items_table
         response = order_items_table.scan()
         all_order_items = response.get('Items', [])
@@ -877,14 +807,12 @@ def get_baker_dashboard_stats():
         baker_order_items = [item for item in all_order_items if item['product_id'] in product_ids]
         order_ids = list(set([item['order_id'] for item in baker_order_items]))
         
-        # Get orders
         orders = []
         for order_id in order_ids:
             order = Order.get_by_id(order_id)
             if order:
                 orders.append(order)
         
-        # Calculate stats
         total_orders = len(orders)
         total_products = len(products)
         total_revenue = sum(float(order['total_amount']) for order in orders if order['payment_status'] == 'completed')
@@ -904,7 +832,6 @@ def get_baker_dashboard_stats():
 def get_baker_products():
     """Get all products for the logged-in baker"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -915,7 +842,6 @@ def get_baker_products():
         if not payload or payload['user_type'] != 'baker':
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get baker profile
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -946,7 +872,6 @@ def get_baker_products():
 def update_baker_product(product_id):
     """Update a product"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -957,7 +882,6 @@ def update_baker_product(product_id):
         if not payload or payload['user_type'] != 'baker':
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get baker profile
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -966,7 +890,6 @@ def update_baker_product(product_id):
         if not baker:
             return jsonify({'error': 'Baker profile not found'}), 404
         
-        # Get product and verify ownership
         product = Product.get_by_id(str(product_id))
         if not product:
             return jsonify({'error': 'Product not found'}), 404
@@ -976,7 +899,6 @@ def update_baker_product(product_id):
         
         data = request.get_json()
         
-        # Update product fields
         update_data = {}
         if 'name' in data:
             update_data['name'] = data['name']
@@ -991,7 +913,6 @@ def update_baker_product(product_id):
         
         Product.update(str(product_id), **update_data)
         
-        # Get updated product
         updated_product = Product.get_by_id(str(product_id))
         
         return jsonify({
@@ -1014,7 +935,6 @@ def update_baker_product(product_id):
 def delete_baker_product(product_id):
     """Delete a product"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -1025,7 +945,6 @@ def delete_baker_product(product_id):
         if not payload or payload['user_type'] != 'baker':
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get baker profile
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -1034,7 +953,6 @@ def delete_baker_product(product_id):
         if not baker:
             return jsonify({'error': 'Baker profile not found'}), 404
         
-        # Get product and verify ownership
         product = Product.get_by_id(str(product_id))
         if not product:
             return jsonify({'error': 'Product not found'}), 404
@@ -1053,7 +971,6 @@ def delete_baker_product(product_id):
 def update_order_status(order_id):
     """Update order status (Baker endpoint) - Sends SNS notification"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -1064,7 +981,6 @@ def update_order_status(order_id):
         if not payload or payload['user_type'] != 'baker':
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get baker profile
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -1084,19 +1000,15 @@ def update_order_status(order_id):
         
         new_status = data['status']
         
-        # Validate status
         valid_statuses = ['pending', 'confirmed', 'preparing', 'baking', 'ready', 'out_for_delivery', 'delivered', 'cancelled']
         if new_status not in valid_statuses:
             return jsonify({'error': f'Invalid status. Must be one of: {valid_statuses}'}), 400
         
-        # Update order status
         Order.update(str(order_id), status=new_status)
         
-        # Get updated order and customer info
         updated_order = Order.get_by_id(str(order_id))
         customer = User.get_by_id(order['user_id'])
         
-        # Send status update via SNS
         if SNS_ENABLED and customer:
             try:
                 sns_send_status_update(
@@ -1110,7 +1022,6 @@ def update_order_status(order_id):
             except Exception as e:
                 print(f"Warning: Failed to send SNS status update: {e}")
         
-        # If status is out_for_delivery, send delivery notification
         if SNS_ENABLED and new_status == 'out_for_delivery' and customer:
             try:
                 delivery_address = json.loads(order['delivery_address'])
@@ -1144,7 +1055,6 @@ def update_order_status(order_id):
 def get_baker_orders():
     """Get all orders for the logged-in baker"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -1155,7 +1065,6 @@ def get_baker_orders():
         if not payload or payload['user_type'] != 'baker':
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get baker profile
         user = User.get_by_id(payload['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -1164,11 +1073,9 @@ def get_baker_orders():
         if not baker:
             return jsonify({'error': 'Baker profile not found'}), 404
         
-        # Get products
         products = Product.get_by_baker_id(baker['id'])
         product_ids = [p['id'] for p in products]
         
-        # Get all order items for baker's products
         from dynamodb_database import order_items_table
         response = order_items_table.scan()
         all_order_items = response.get('Items', [])
@@ -1176,30 +1083,24 @@ def get_baker_orders():
         baker_order_items = [item for item in all_order_items if item['product_id'] in product_ids]
         order_ids = list(set([item['order_id'] for item in baker_order_items]))
         
-        # Get orders
         orders = []
         for order_id in order_ids:
             order = Order.get_by_id(order_id)
             if order:
                 orders.append(order)
         
-        # Sort by created_at descending
         orders.sort(key=lambda x: x['created_at'], reverse=True)
         
-        # Build response
         result = []
         for order in orders:
-            # Get items for this order that belong to this baker
             baker_items = [item for item in OrderItem.get_by_order_id(order['id']) 
                           if item['product_id'] in product_ids]
             
-            # Parse delivery address
             try:
                 delivery_address = json.loads(order['delivery_address'])
             except:
                 delivery_address = {}
             
-            # Get customer info
             customer = User.get_by_id(order['user_id'])
             
             result.append({
@@ -1226,129 +1127,131 @@ def get_baker_orders():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# =========================
 # Wishlist Routes
+# =========================
+
 @app.route('/api/wishlist', methods=['GET'])
 def get_wishlist():
-    """Get user's wishlist"""
+    """Get logged-in user's wishlist"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
-        
+
         token = auth_header.split(' ')[1]
         payload = verify_token(token)
-        
+
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
-        
-        # Get wishlist items
+
         wishlist_items = Wishlist.get_by_user_id(payload['user_id'])
-        
+
         result = []
         for item in wishlist_items:
             product = Product.get_by_id(item['product_id'])
-            if product:
-                baker = Baker.get_by_id(product['baker_id'])
-                result.append({
-                    'id': item['id'],
-                    'product_id': item['product_id'],
-                    'product': {
-                        'id': product['id'],
-                        'name': product['name'],
-                        'category': product['category'],
-                        'price': product['price'],
-                        'description': product['description'],
-                        'image_url': product.get('image_url', ''),
-                        'in_stock': product['in_stock'],
-                        'baker': {
-                            'id': baker['id'],
-                            'shop_name': baker['shop_name'],
-                            'city': baker['city']
-                        } if baker else None
-                    },
-                    'created_at': item['created_at']
-                })
-        
+            if not product:
+                continue
+
+            baker = Baker.get_by_id(product['baker_id'])
+
+            result.append({
+                'product_id': item['product_id'],
+                'created_at': item['created_at'],
+                'product': {
+                    'id': product['id'],
+                    'name': product['name'],
+                    'category': product['category'],
+                    'price': product['price'],
+                    'description': product['description'],
+                    'image_url': product.get('image_url', ''),
+                    'in_stock': product['in_stock'],
+                    'baker': {
+                        'id': baker['id'],
+                        'shop_name': baker['shop_name'],
+                        'city': baker['city']
+                    } if baker else None
+                }
+            })
+
         return jsonify({'wishlist': result}), 200
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/wishlist/<int:product_id>', methods=['POST'])
 def add_to_wishlist(product_id):
     """Add product to wishlist"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
-        
+
         token = auth_header.split(' ')[1]
         payload = verify_token(token)
-        
+
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
-        
-        # Check if product exists
+
         product = Product.get_by_id(str(product_id))
         if not product:
             return jsonify({'error': 'Product not found'}), 404
-        
-        # Check if already in wishlist
-        existing = Wishlist.get_by_user_and_product(payload['user_id'], str(product_id))
-        
+
+        existing = Wishlist.get_by_user_and_product(
+            payload['user_id'],
+            str(product_id)
+        )
+
         if existing:
             return jsonify({'message': 'Product already in wishlist'}), 200
-        
-        # Add to wishlist
-        wishlist_id = generate_id()
-        wishlist_item = Wishlist.create(
-            wishlist_id=wishlist_id,
+
+        Wishlist.create(
             user_id=payload['user_id'],
             product_id=str(product_id)
         )
-        
+
         return jsonify({
             'message': 'Product added to wishlist',
-            'wishlist_item': {
-                'id': wishlist_item['id'],
-                'product_id': wishlist_item['product_id']
-            }
+            'product_id': str(product_id)
         }), 201
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/wishlist/<int:product_id>', methods=['DELETE'])
 def remove_from_wishlist(product_id):
     """Remove product from wishlist"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
-        
+
         token = auth_header.split(' ')[1]
         payload = verify_token(token)
-        
+
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
-        
-        # Find wishlist item
-        wishlist_item = Wishlist.get_by_user_and_product(payload['user_id'], str(product_id))
-        
+
+        wishlist_item = Wishlist.get_by_user_and_product(
+            payload['user_id'],
+            str(product_id)
+        )
+
         if not wishlist_item:
             return jsonify({'error': 'Product not in wishlist'}), 404
-        
-        Wishlist.delete(wishlist_item['id'])
-        
+
+        Wishlist.delete(
+            user_id=payload['user_id'],
+            product_id=str(product_id)
+        )
+
         return jsonify({'message': 'Product removed from wishlist'}), 200
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# AI and Recipe Routes
 @app.route('/api/ai/recipe-suggestions', methods=['POST'])
 def get_ai_recipe_suggestions():
     """Get AI-powered recipe suggestions based on cart items"""
@@ -1372,7 +1275,6 @@ def get_ai_recipe_suggestions():
                 'message': 'Add items to your cart to get recipe suggestions!'
             }), 200
         
-        # Get AI suggestions
         result = get_recipe_suggestions(cart_items)
         
         return jsonify(result), 200
@@ -1401,7 +1303,6 @@ def get_ai_product_recommendations():
                 'message': 'No products available'
             }), 200
         
-        # Get AI recommendations
         recommendations = get_product_recommendations(user_preferences, available_products)
         
         return jsonify({
@@ -1412,12 +1313,10 @@ def get_ai_product_recommendations():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Review Routes
 @app.route('/api/orders/<int:order_id>/review', methods=['POST'])
 def submit_review(order_id):
     """Submit a review for a product in an order"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -1428,7 +1327,6 @@ def submit_review(order_id):
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get order and verify ownership
         order = Order.get_by_id(str(order_id))
         if not order:
             return jsonify({'error': 'Order not found'}), 404
@@ -1438,7 +1336,6 @@ def submit_review(order_id):
         
         data = request.get_json()
         
-        # Validate required fields
         required_fields = ['product_id', 'rating', 'comment']
         for field in required_fields:
             if field not in data:
@@ -1448,27 +1345,23 @@ def submit_review(order_id):
         rating = data['rating']
         comment = data['comment']
         
-        # Validate rating
         if not isinstance(rating, int) or rating < 1 or rating > 5:
             return jsonify({'error': 'Rating must be between 1 and 5'}), 400
         
-        # Verify product exists and is in the order
         product = Product.get_by_id(product_id)
         if not product:
             return jsonify({'error': 'Product not found'}), 404
         
-        # Check if product is in this order
+       
         order_items = OrderItem.get_by_order_id(order['id'])
         order_item = next((item for item in order_items if item['product_id'] == product_id), None)
         
         if not order_item:
             return jsonify({'error': 'Product not found in this order'}), 400
         
-        # Check if review already exists
         existing_review = Review.get_by_user_and_product(payload['user_id'], product_id)
         
         if existing_review:
-            # Update existing review
             Review.update(
                 existing_review['id'],
                 rating=rating,
@@ -1487,7 +1380,6 @@ def submit_review(order_id):
                 }
             }), 200
         else:
-            # Create new review
             review_id = generate_id()
             review = Review.create(
                 review_id=review_id,
@@ -1523,7 +1415,6 @@ def get_product_reviews(product_id):
         
         reviews = Review.get_by_product_id(str(product_id))
         
-        # Sort by created_at descending
         reviews.sort(key=lambda x: x['created_at'], reverse=True)
         
         result = []
@@ -1544,7 +1435,6 @@ def get_product_reviews(product_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Register Baker Analytics Blueprint - DynamoDB VERSION
 try:
     from baker_analytics_dynamodb import baker_analytics_bp
     app.register_blueprint(baker_analytics_bp, url_prefix='/api')
@@ -1552,7 +1442,6 @@ try:
 except Exception as e:
     print(f"Error registering Baker Analytics Blueprint: {e}")
 
-# Register Baker Orders Blueprint - DynamoDB VERSION
 try:
     from baker_orders_dynamodb import baker_orders_bp
     app.register_blueprint(baker_orders_bp, url_prefix='/api')
@@ -1560,7 +1449,6 @@ try:
 except Exception as e:
     print(f"Error registering Baker Orders Blueprint: {e}")
 
-# Register Customer Profile Blueprint - DynamoDB VERSION
 try:
     from customer_profile_dynamodb import customer_profile_bp
     app.register_blueprint(customer_profile_bp, url_prefix='/api')
@@ -1568,7 +1456,6 @@ try:
 except Exception as e:
     print(f"Error registering Customer Profile Blueprint: {e}")
 
-# Register Notifications Blueprint - DynamoDB VERSION
 try:
     from notifications_dynamodb import notifications_bp
     app.register_blueprint(notifications_bp, url_prefix='/api')
@@ -1576,7 +1463,6 @@ try:
 except Exception as e:
     print(f"Error registering Notifications Blueprint: {e}")
 
-# Register Baker Reviews Blueprint - DynamoDB VERSION
 try:
     from baker_reviews_dynamodb import baker_reviews_bp
     app.register_blueprint(baker_reviews_bp, url_prefix='/api')
@@ -1584,7 +1470,6 @@ try:
 except Exception as e:
     print(f"Error registering Baker Reviews Blueprint: {e}")
 
-# Register Admin Routes Blueprint - DynamoDB VERSION
 try:
     from admin_routes_dynamodb import admin_bp
     app.register_blueprint(admin_bp)
@@ -1593,6 +1478,4 @@ except Exception as e:
     print(f"Error registering Admin Routes Blueprint: {e}")
 
 if __name__ == '__main__':
-    # For AWS deployment, use a production server like Gunicorn
-    # This is just for local testing
     app.run(debug=False, host='0.0.0.0', port=5000)

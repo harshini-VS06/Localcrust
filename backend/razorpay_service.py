@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Initialize Razorpay client
 razorpay_client = razorpay.Client(
     auth=(
         os.getenv('RAZORPAY_KEY_ID'),
@@ -28,15 +27,13 @@ def create_razorpay_order(amount, order_id, currency='INR'):
         dict: Razorpay order response
     """
     try:
-        # Convert amount to paise (smallest currency unit)
         amount_in_paise = int(amount * 100)
         
-        # Create Razorpay order
         razorpay_order = razorpay_client.order.create({
             'amount': amount_in_paise,
             'currency': currency,
             'receipt': order_id,
-            'payment_capture': 1  # Auto capture payment
+            'payment_capture': 1  
         })
         
         return {

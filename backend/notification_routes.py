@@ -43,7 +43,6 @@ def get_notifications():
         if not user:
             return jsonify({'error': 'Unauthorized'}), 401
         
-        # Get all notifications for this user, ordered by newest first
         notifications = Notification.query.filter_by(
             user_id=user.id
         ).order_by(Notification.created_at.desc()).all()
@@ -88,7 +87,6 @@ def mark_notification_as_read(notification_id):
         if not user:
             return jsonify({'error': 'Unauthorized'}), 401
         
-        # Get notification and verify ownership
         notification = Notification.query.get(notification_id)
         if not notification:
             return jsonify({'error': 'Notification not found'}), 404
@@ -96,7 +94,6 @@ def mark_notification_as_read(notification_id):
         if notification.user_id != user.id:
             return jsonify({'error': 'Unauthorized'}), 403
         
-        # Mark as read
         notification.read = True
         db.session.commit()
         
@@ -120,7 +117,6 @@ def mark_all_notifications_as_read():
         if not user:
             return jsonify({'error': 'Unauthorized'}), 401
         
-        # Update all unread notifications
         Notification.query.filter_by(
             user_id=user.id,
             read=False
@@ -144,7 +140,6 @@ def delete_all_notifications():
         if not user:
             return jsonify({'error': 'Unauthorized'}), 401
         
-        # Delete all notifications
         Notification.query.filter_by(user_id=user.id).delete()
         db.session.commit()
         
@@ -164,7 +159,6 @@ def delete_notification(notification_id):
         if not user:
             return jsonify({'error': 'Unauthorized'}), 401
         
-        # Get notification and verify ownership
         notification = Notification.query.get(notification_id)
         if not notification:
             return jsonify({'error': 'Notification not found'}), 404
@@ -172,7 +166,6 @@ def delete_notification(notification_id):
         if notification.user_id != user.id:
             return jsonify({'error': 'Unauthorized'}), 403
         
-        # Delete notification
         db.session.delete(notification)
         db.session.commit()
         
@@ -184,7 +177,6 @@ def delete_notification(notification_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Helper function to create notifications (can be imported by other modules)
 def create_notification(user_id, title, message, notification_type='info'):
     """
     Create a new notification

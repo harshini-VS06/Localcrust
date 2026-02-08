@@ -2,12 +2,11 @@
 AWS SNS Service for Real-Time Notifications
 Handles order notifications, status updates, and delivery notifications
 
-IMPORTANT: This service assumes SNS topic and subscriptions are already created manually in AWS.
-Only the notification sending functionality is implemented here.
+IMPORTANT: This service uses 5 separate SNS topics for different notification types.
 You must manually:
-1. Create SNS topic in AWS console
-2. Subscribe emails to the topic in AWS console
-3. Add the SNS_TOPIC_ARN to your .env file
+1. Create 5 SNS topics in AWS console
+2. Subscribe emails to each topic in AWS console
+3. Add all 5 SNS_*_TOPIC ARNs to your .env file
 """
 import boto3
 import json
@@ -17,39 +16,36 @@ from botocore.exceptions import ClientError
 
 load_dotenv()
 
-# Initialize SNS client
 sns_client = boto3.client(
     'sns',
-    region_name=os.getenv('AWS_REGION', 'us-east-1'),
-    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
+    region_name=os.getenv('AWS_REGION', 'us-east-1')
 )
 
-# SNS Topic ARN - Must be set in your .env file
-SNS_TOPIC_ARN = os.getenv('SNS_TOPIC_ARN', '')
+SNS_ORDER_CONFIRMATION_TOPIC = os.getenv('SNS_ORDER_CONFIRMATION_TOPIC', '')
+SNS_ORDER_STATUS_TOPIC = os.getenv('SNS_ORDER_STATUS_TOPIC', '')
+SNS_DELIVERY_TOPIC = os.getenv('SNS_DELIVERY_TOPIC', '')
+SNS_BAKER_ORDER_TOPIC = os.getenv('SNS_BAKER_ORDER_TOPIC', '')
+SNS_PAYMENT_TOPIC = os.getenv('SNS_PAYMENT_TOPIC', '')
 
 class SNSNotificationService:
     """Service class for sending SNS notifications"""
     
     @staticmethod
-    def send_notification(subject, message, topic_arn=None, message_attributes=None):
+    def send_notification(subject, message, topic_arn, message_attributes=None):
         """
         Send a notification through SNS
         
         Args:
             subject: Email subject line
             message: Message body
-            topic_arn: SNS topic ARN (uses default from env if not provided)
+            topic_arn: SNS topic ARN
             message_attributes: Optional message attributes for filtering
         
         Returns:
             bool: True if successful, False otherwise
         """
         if not topic_arn:
-            topic_arn = SNS_TOPIC_ARN
-        
-        if not topic_arn:
-            print("❌ SNS Topic ARN not configured in .env file")
+            print(f"❌ SNS Topic ARN not configured")
             print(f"   Subject: {subject}")
             print(f"   Message: {message[:100]}...")
             return False
@@ -61,7 +57,6 @@ class SNSNotificationService:
                 'Message': message
             }
             
-            # Add message attributes if provided
             if message_attributes:
                 params['MessageAttributes'] = message_attributes
             
@@ -69,10 +64,13 @@ class SNSNotificationService:
             
             message_id = response.get('MessageId', '')
             print(f"✅ SNS notification sent - MessageId: {message_id}")
+            print(f"   Topic: {topic_arn.split(':')[-1]}")
+            print(f"   Subject: {subject}")
             return True
             
         except ClientError as e:
             print(f"❌ Error sending SNS notification: {e}")
+            print(f"   Topic ARN: {topic_arn}")
             return False
     
     @staticmethod
@@ -82,7 +80,7 @@ class SNSNotificationService:
         """
         subject = f"🎉 Order Confirmed - {order_id}"
         
-        # Create formatted message
+
         items_list = "\n".join([
             f"  • {item['product_name']} x{item['quantity']} - ₹{item['price'] * item['quantity']:.2f}"
             for item in items
@@ -127,7 +125,6 @@ This is an automated message from Local Crust Bakery.
 For support, please contact us at support@localcrust.com
         """
         
-        # Message attributes for filtering (optional)
         message_attributes = {
             'notification_type': {
                 'DataType': 'String',
@@ -142,6 +139,7 @@ For support, please contact us at support@localcrust.com
         return SNSNotificationService.send_notification(
             subject=subject,
             message=message,
+            topic_arn=SNS_ORDER_CONFIRMATION_TOPIC, 
             message_attributes=message_attributes
         )
     
@@ -243,6 +241,7 @@ For support, please contact us at support@localcrust.com
         return SNSNotificationService.send_notification(
             subject=subject,
             message=message,
+            topic_arn=SNS_ORDER_STATUS_TOPIC,  
             message_attributes=message_attributes
         )
     
@@ -255,7 +254,6 @@ For support, please contact us at support@localcrust.com
         
         time_info = f"\nEstimated Delivery: {estimated_time}" if estimated_time else ""
         
-        # Format address
         address_str = delivery_address
         if isinstance(delivery_address, dict):
             address_parts = [
@@ -312,6 +310,7 @@ For support, please contact us at support@localcrust.com
         return SNSNotificationService.send_notification(
             subject=subject,
             message=message,
+            topic_arn=SNS_DELIVERY_TOPIC,  # ← Uses DELIVERY topic
             message_attributes=message_attributes
         )
     
@@ -375,6 +374,7 @@ This is an automated message from Local Crust Bakery.
         return SNSNotificationService.send_notification(
             subject=subject,
             message=message,
+            topic_arn=SNS_BAKER_ORDER_TOPIC,  # ← Uses BAKER topic
             message_attributes=message_attributes
         )
     
@@ -438,6 +438,7 @@ For support, please contact us at support@localcrust.com
         return SNSNotificationService.send_notification(
             subject=subject,
             message=message,
+            topic_arn=SNS_PAYMENT_TOPIC, 
             message_attributes=message_attributes
         )
     
@@ -458,7 +459,6 @@ For support, please contact us at support@localcrust.com
         return action_texts.get(status, 'Thank you for your order!')
 
 
-# Convenience functions for easy import
 def send_order_confirmation(order_id, customer_email, customer_name, total_amount, items):
     """Send order confirmation via SNS"""
     return SNSNotificationService.send_order_confirmation(
@@ -488,3 +488,30 @@ def send_payment_confirmation(order_id, customer_email, customer_name, payment_i
     return SNSNotificationService.send_payment_confirmation(
         order_id, customer_email, customer_name, payment_id, amount
     )
+
+def subscribe_email_to_notifications(email):
+    """
+    Subscribe an email to all notification topics
+    NOTE: In production, you'd typically subscribe to specific topics based on user preferences
+    """
+    topics = [
+        SNS_ORDER_CONFIRMATION_TOPIC,
+        SNS_ORDER_STATUS_TOPIC,
+        SNS_DELIVERY_TOPIC,
+        SNS_PAYMENT_TOPIC
+    ]
+    
+    subscribed_count = 0
+    for topic_arn in topics:
+        if topic_arn:
+            try:
+                sns_client.subscribe(
+                    TopicArn=topic_arn,
+                    Protocol='email',
+                    Endpoint=email
+                )
+                subscribed_count += 1
+            except Exception as e:
+                print(f"Failed to subscribe {email} to topic: {e}")
+    
+    return subscribed_count > 0

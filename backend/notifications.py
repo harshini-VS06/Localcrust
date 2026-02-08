@@ -23,7 +23,6 @@ notifications_bp = Blueprint('notifications', __name__)
 def get_notifications():
     """Get all notifications for the logged-in user"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -34,7 +33,6 @@ def get_notifications():
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get notifications
         notifications = Notification.query.filter_by(
             user_id=payload['user_id']
         ).order_by(Notification.created_at.desc()).all()
@@ -51,7 +49,6 @@ def get_notifications():
                 'related_review_id': n.related_review_id
             }
             
-            # If this is a review reply notification, include the baker's reply
             if n.related_review_id and n.review:
                 notification_data['review'] = {
                     'id': n.review.id,
@@ -71,7 +68,6 @@ def get_notifications():
 def get_unread_count():
     """Get count of unread notifications"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -82,7 +78,6 @@ def get_unread_count():
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Count unread notifications
         count = Notification.query.filter_by(
             user_id=payload['user_id'],
             read=False
@@ -97,7 +92,6 @@ def get_unread_count():
 def mark_notification_as_read(notification_id):
     """Mark a notification as read"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -108,17 +102,14 @@ def mark_notification_as_read(notification_id):
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get notification
         notification = Notification.query.get(notification_id)
         
         if not notification:
             return jsonify({'error': 'Notification not found'}), 404
         
-        # Verify ownership
         if notification.user_id != payload['user_id']:
             return jsonify({'error': 'Unauthorized'}), 403
         
-        # Mark as read
         notification.read = True
         db.session.commit()
         
@@ -134,7 +125,6 @@ def mark_notification_as_read(notification_id):
 def mark_all_notifications_as_read():
     """Mark all notifications as read"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -145,7 +135,6 @@ def mark_all_notifications_as_read():
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Mark all notifications as read
         Notification.query.filter_by(
             user_id=payload['user_id'],
             read=False
@@ -165,7 +154,6 @@ def mark_all_notifications_as_read():
 def delete_notification(notification_id):
     """Delete a notification"""
     try:
-        # Get token from header
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization required'}), 401
@@ -176,17 +164,14 @@ def delete_notification(notification_id):
         if not payload:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        # Get notification
         notification = Notification.query.get(notification_id)
         
         if not notification:
             return jsonify({'error': 'Notification not found'}), 404
         
-        # Verify ownership
         if notification.user_id != payload['user_id']:
             return jsonify({'error': 'Unauthorized'}), 403
         
-        # Delete notification
         db.session.delete(notification)
         db.session.commit()
         
@@ -198,7 +183,6 @@ def delete_notification(notification_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Helper function to create notifications
 def create_notification(user_id, title, message, notification_type='info'):
     """
     Helper function to create a notification

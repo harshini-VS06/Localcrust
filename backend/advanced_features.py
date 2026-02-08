@@ -220,8 +220,7 @@ class AnalyticsService:
             {'date': date, 'revenue': revenue}
             for date, revenue in sorted(revenue_by_day.items())
         ]
-        
-        # Peak hours
+    
         hour_counts = {}
         for order in orders:
             hour = order.created_at.hour
@@ -257,7 +256,6 @@ class AnalyticsService:
         
         total_spent = sum(o.total_amount for o in orders if o.payment_status == 'completed')
         
-        # Category analysis
         category_count = {}
         for order in orders:
             for item in order.items:
@@ -329,23 +327,19 @@ class RecommendationEngine:
     @staticmethod
     def get_collaborative_recommendations(user_orders: List, all_orders: List, products: List) -> List:
         """Collaborative filtering recommendations"""
-        # Find users with similar purchase history
-        # Recommend products they bought that current user hasn't
         
         user_products = set()
         for order in user_orders:
             for item in order.items:
                 user_products.add(item.product_id)
         
-        # Simple collaborative filtering
         similar_user_products = set()
         for order in all_orders:
             order_products = set(item.product_id for item in order.items)
-            # If orders overlap with user's purchases
+            
             if len(order_products & user_products) >= 2:
                 similar_user_products.update(order_products)
         
-        # Recommend products user hasn't bought
         recommended_ids = similar_user_products - user_products
         
         return [p for p in products if p.id in recommended_ids][:5]

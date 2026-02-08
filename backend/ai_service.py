@@ -10,7 +10,6 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 
-# Configure Gemini
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-pro')
@@ -35,7 +34,6 @@ def get_recipe_suggestions(cart_items: list) -> dict:
         }
     
     try:
-        # Create prompt
         products_text = ", ".join(cart_items)
         prompt = f"""
         Based on these bakery items that a customer has in their cart: {products_text}
@@ -68,10 +66,8 @@ def get_recipe_suggestions(cart_items: list) -> dict:
         
         response = model.generate_content(prompt)
         
-        # Parse response
         text = response.text.strip()
         
-        # Remove markdown code blocks if present
         if text.startswith('```json'):
             text = text[7:]
         if text.startswith('```'):
@@ -140,7 +136,6 @@ def get_product_recommendations(user_preferences: list, available_products: list
         List of recommended product names
     """
     if not model or not user_preferences:
-        # Return random products as fallback
         return available_products[:3] if len(available_products) >= 3 else available_products
     
     try:
@@ -164,7 +159,6 @@ def get_product_recommendations(user_preferences: list, available_products: list
         response = model.generate_content(prompt)
         text = response.text.strip()
         
-        # Clean response
         if text.startswith('```json'):
             text = text[7:]
         if text.startswith('```'):
@@ -219,7 +213,6 @@ def generate_recipe_from_scratch(ingredients: list, dietary_preference: str = "n
         response = model.generate_content(prompt)
         text = response.text.strip()
         
-        # Clean response
         if text.startswith('```json'):
             text = text[7:]
         if text.startswith('```'):
